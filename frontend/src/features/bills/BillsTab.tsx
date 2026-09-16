@@ -99,7 +99,7 @@ export default function BillsTab() {
             <button className="btn primary" onClick={() => { setEditingBill(null); setShowModal(true); }}>+ Add bill</button>
           </div>
         </div>
-        <Filters search={search} setSearch={setSearch} vendorFilter={vendorFilter} setVendorFilter={setVendorFilter} stageFilter={stageFilter} setStageFilter={setStageFilter} catFilter={catFilter} setCatFilter={setCatFilter} />
+        <Filters vendors={vendors} search={search} setSearch={setSearch} vendorFilter={vendorFilter} setVendorFilter={setVendorFilter} stageFilter={stageFilter} setStageFilter={setStageFilter} catFilter={catFilter} setCatFilter={setCatFilter} />
         <Table bills={filtered} sortBy={sortBy} sortDir={sortDir} onSort={(k: BillSortKey) => { if (sortBy === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(k); setSortDir('desc'); } }} onEdit={(b: Bill) => { setEditingBill(b); setShowModal(true); }} />
         <div className="reg-foot">
           <span>"#" renumbers with your current filter/sort · click Date / Amount to sort · click ✎ to edit</span>
@@ -281,12 +281,16 @@ function AgingPanel({ bills }: { bills: Bill[] }) {
   );
 }
 
-function Filters({ search, setSearch, vendorFilter, setVendorFilter, stageFilter, setStageFilter, catFilter, setCatFilter }: any) {
+function Filters({ vendors, search, setSearch, vendorFilter, setVendorFilter, stageFilter, setStageFilter, catFilter, setCatFilter }: any) {
   return (
     <div className="filters">
       <input type="text" placeholder="Search vendor, invoice no. or status…" value={search} onChange={e => setSearch(e.target.value)} />
       <select value={vendorFilter} onChange={e => setVendorFilter(e.target.value)}>
-        <option value="">All vendors</option>
+        {vendors.map((vendor: string) => (
+          <option key={vendor} value={vendor}>
+            {vendor}
+          </option>
+        ))}
         {Array.from(new Set([])).map(v => <option key={v} value={v}>{v}</option>)}
       </select>
       <select value={stageFilter} onChange={e => setStageFilter(e.target.value)}>
@@ -302,25 +306,31 @@ function Filters({ search, setSearch, vendorFilter, setVendorFilter, stageFilter
     </div>
   );
 }
+
 type BillSortKey = 'date' | 'amount';
 
-type TableProps = {
-  bills: Bill[];
-  sortBy: BillSortKey;
-  sortDir: 'asc' | 'desc';
-  onSort: (key: BillSortKey) => void;
-  onEdit: (bill: Bill) => void;
-};
+ type TableProps = {
+    bills: Bill[];
+    sortBy: BillSortKey;
+    sortDir: 'asc' | 'desc';
+    onSort: (key: BillSortKey) => void;
+    onEdit: (bill: Bill) => void;
+  };
 
-function Table({ bills, sortBy, sortDir, onSort, onEdit }: any) {
+function Table({ bills, sortBy, sortDir, onSort, onEdit }: TableProps) {
   return (
     <div className="table-scroll">
       <table>
         <thead>
           <tr>
             <th>#</th><th>Vendor</th><th>Invoice no.</th>
-            <th className="sortable" onClick={() => onSort('date')}>Date <span className="arrow">↕</span></th>
-            <th className="num sortable" onClick={() => onSort('amount')}>Amount <span className="arrow">↕</span></th>
+            <th className="sortable" onClick={() => onSort('date')}>
+  Date {sortBy === 'date' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+</th>
+
+<th className="num sortable" onClick={() => onSort('amount')}>
+  Amount {sortBy === 'amount' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+</th>
             <th>Stage</th><th>Cleared FY</th><th>Payment attribute</th><th>Status / tracker remark</th><th></th>
           </tr>
         </thead>
