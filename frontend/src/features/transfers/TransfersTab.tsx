@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../../lib/api';
 import type { Transfer, District } from '../../types';
-import { fmtIN, fmtShort, pct } from '../bills/utils';
+import { fmtIN, fmtShort } from '../bills/utils';
 
 export default function TransfersTab() {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
