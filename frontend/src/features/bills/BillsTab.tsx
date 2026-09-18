@@ -382,6 +382,8 @@ function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) =
     amount: bill?.amount || '',
     attribute: bill?.attribute || '',
     status: bill?.status || '',
+    budgetCode: bill?.budgetCode || '',
+    objectHead: bill?.objectHead || '',
   });
 
   return (
@@ -392,6 +394,8 @@ function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) =
         <div className="field-row">
           <div className="field"><label>Invoice no.</label><input value={form.invoice} onChange={e => setForm({ ...form, invoice: e.target.value })} /></div>
           <div className="field"><label>Invoice date</label><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></div>
+          <div className="field"><label>Budget code</label><input value={form.budgetCode} onChange={e => setForm({ ...form, budgetCode: e.target.value })} /></div>
+          <div className="field"><label>Object Head</label><input value={form.objectHead} onChange={e => setForm({ ...form, objectHead: e.target.value })} /></div>
         </div>
         <div className="field"><label>Amount (₹)</label><input type="number" min="0" step="1" value={form.amount} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} /></div>
         <div className="field"><label>Payment attribute</label><input value={form.attribute} onChange={e => setForm({ ...form, attribute: e.target.value })} /></div>
