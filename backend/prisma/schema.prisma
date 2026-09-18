@@ -8,68 +8,68 @@ datasource db {
 }
 
 model Bill {
-  id              String   @id @default(cuid())
-  sr              Int?
-  vendor          String
-  invoice         String
-  date            DateTime?
-  amount          Float
-  bucket          String   // pipeline stage name (e.g. "Treasury Clearance")
-  cat             String   // "cleared" | "in_progress" | "on_hold"
-  status          String   // free-text status
-  attribute       String?  // payment attribute
-  note            String?
-  days            Int?
-  clearedFY       String?
-  source          String   @default("seed")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id        String    @id @default(cuid())
+  sr        Int?
+  vendor    String
+  invoice   String
+  date      DateTime?
+  amount    Float
+  bucket    String
+  cat       String
+  status    String
+  attribute String?
+  note      String?
+  days      Int?
+  clearedFY String?
+  source    String    @default("seed")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@map("bills")
 }
 
 model Budget {
-  id        String @id
-  code      String @unique
-  name      String
-  nameMr    String
-  prov215   Float  @default(0)
-  exp215    Float  @default(0)
-  prov224   Float  @default(0)
-  exp224    Float  @default(0)
-  prov233   Float  @default(0)
-  exp233    Float  @default(0)
+  id      String @id
+  code    String @unique
+  name    String
+  nameMr  String
+  prov215 Float  @default(0)
+  exp215  Float  @default(0)
+  prov224 Float  @default(0)
+  exp224  Float  @default(0)
+  prov233 Float  @default(0)
+  exp233  Float  @default(0)
 
   @@map("budgets")
 }
 
 model Transfer {
-  id          String   @id @default(cuid())
-  recipient   String
-  purpose     String
-  objectCode  String
-  amount      Float
-  orderDate   DateTime?
-  status      String   // "transferred" | "minutes_awaited"
-  utilized    Float    @default(0)
-  remarks     String?
-  source      String   @default("seed")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String    @id @default(cuid())
+  recipient  String
+  purpose    String
+  objectCode String
+  amount     Float
+  orderDate  DateTime?
+  status     String
+  utilized   Float     @default(0)
+  remarks    String?
+  source     String    @default("seed")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@map("transfers")
 }
 
 model District {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   district    String
   division    String
-  amount      Float    @default(0)
+  amount      Float     @default(0)
   releaseDate DateTime?
   remarks     String?
-  source      String   @default("seed")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  source      String    @default("seed")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@map("districts")
 }

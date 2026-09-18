@@ -25,7 +25,7 @@ async function bootstrap() {
   const port =
     (globalThis as typeof globalThis & {
       process?: { env?: { PORT?: string } };
-    }).process?.env?.PORT || 3000;
+    }).process?.env?.PORT || 3001;
 
   await app.listen(port, '0.0.0.0');
 }

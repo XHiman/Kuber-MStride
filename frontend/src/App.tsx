@@ -24,10 +24,6 @@ export default function App() {
             Editable tracker — bill clearance pipeline, FY 2026-27 budget by object code, and agency fund transfers
           </p>
         </div>
-        <div className="asof">
-          Seeded from tracker as on <b>31 Aug 2026</b><br />
-          <span>Connected to backend server</span>
-        </div>
       </header>
 
       <nav className="tabs">
