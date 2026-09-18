@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { apiClient } from '../../lib/api';
 import type { Transfer, District } from '../../types';
 import { fmtIN, fmtShort } from '../bills/utils';
+import { downloadCSV } from '../../lib/export';
 
 export default function TransfersTab() {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
@@ -35,6 +36,21 @@ export default function TransfersTab() {
     load();
   }
 
+  function handleExport() {
+    const rows = transfers.map(t => ({
+      Recipient: t.recipient,
+      Purpose: t.purpose,
+      'Object Code': t.objectCode,
+      Amount: t.amount,
+      'Order Date': t.orderDate || '',
+      Status: t.status,
+      Utilized: t.utilized,
+      Balance: t.amount - t.utilized,
+      Remarks: t.remarks || '',
+    }));
+    downloadCSV(rows, 'transfers');
+  }
+
   return (
     <div className="tab-panel" id="tab-transfers">
       {/* Transfer stats */}
@@ -61,6 +77,7 @@ export default function TransfersTab() {
           <h2>Fund transfers — agencies / DDOs</h2>
           <div className="panel-actions">
             <span className="note">{transfers.length} record{(transfers.length === 1 ? '' : 's')}</span>
+            <button className="btn export-btn" onClick={handleExport}>↓ Export CSV</button>
             <button className="btn primary" onClick={() => setShowModal(true)}>+ Add transfer</button>
           </div>
         </div>

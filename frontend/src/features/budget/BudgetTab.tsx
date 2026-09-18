@@ -2,14 +2,28 @@ import { useState, useEffect } from 'react';
 import { apiClient } from '../../lib/api';
 import type { BudgetRow } from '../../types';
 import { fmtIN, fmtShort, pct } from '../bills/utils';
+import { downloadCSV } from '../../lib/export';
 
 const BUDGET_CODE_ORDER = ['01', '06', '10', '11', '13', '14', '16', '17', '21', '24', '26', '27', '28', '31'];
 
 export default function BudgetTab() {
   const [budget, setBudget] = useState<any>(null);
   const [rows, setRows] = useState<BudgetRow[]>([]);
+  const [pendingEdits, setPendingEdits] = useState<Map<string, Partial<BudgetRow>>>(new Map());
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (pendingEdits.size > 0) {
+      const handler = (e: BeforeUnloadEvent) => {
+        e.preventDefault();
+        e.returnValue = '';
+      };
+      window.addEventListener('beforeunload', handler);
+      return () => window.removeEventListener('beforeunload', handler);
+    }
+  }, [pendingEdits.size]);
 
   async function load() {
     const data = await apiClient.budget.get();
@@ -18,6 +32,25 @@ export default function BudgetTab() {
   }
 
   if (!budget) return <div className="panel"><p>Loading budget data…</p></div>;
+
+  function handleExport() {
+    const rows = budget.rows.map((r: BudgetRow) => ({
+      Code: r.code,
+      'Object head': r.name,
+      '215_Provision': r.prov215,
+      '215_Expenditure': r.exp215,
+      '215_Balance': (r.prov215 || 0) - (r.exp215 || 0),
+      '224_Provision': r.prov224,
+      '224_Expenditure': r.exp224,
+      '224_Balance': (r.prov224 || 0) - (r.exp224 || 0),
+      '233_Provision': r.prov233,
+      '233_Expenditure': r.exp233,
+      '233_Balance': (r.prov233 || 0) - (r.exp233 || 0),
+      'Total_Provision': (r.prov215 || 0) + (r.prov224 || 0) + (r.prov233 || 0),
+      'Total_Expenditure': (r.exp215 || 0) + (r.exp224 || 0) + (r.exp233 || 0),
+    }));
+    downloadCSV(rows, 'budget');
+  }
 
   const totals = budget.totals;
   const grandProv = budget.grandProv;
@@ -31,16 +64,40 @@ export default function BudgetTab() {
   | 'prov233'
   | 'exp233';
 
-async function handleEdit(
+function handleEdit(
   code: string,
   field: EditableBudgetField,
   value: number,
 ) {
-  await apiClient.budget.update(code, { [field]: value });
-  load();
+  setPendingEdits(prev => {
+    const copy = new Map(prev);
+    const existing = copy.get(code) || {};
+    copy.set(code, { ...existing, [field]: value });
+    return copy;
+  });
+}
+
+async function handleSave() {
+  if (pendingEdits.size === 0) return;
+  setSaving(true);
+  try {
+    for (const [code, edits] of pendingEdits) {
+      await apiClient.budget.update(code, edits);
+    }
+    await load();
+    setPendingEdits(new Map());
+  } finally {
+    setSaving(false);
+  }
+}
+
+function handleUndo() {
+  setPendingEdits(new Map());
 }
 
 function cell(row: BudgetRow, field: EditableBudgetField) {
+  const pending = pendingEdits.get(row.code)?.[field];
+  const displayValue = pending ?? row[field] ?? 0;
   return (
     <td
       className="num mono edit-cell"
@@ -56,7 +113,7 @@ function cell(row: BudgetRow, field: EditableBudgetField) {
         }
       }}
     >
-      {fmtIN(row[field] || 0)}
+      {fmtIN(displayValue)}
     </td>
   );
 }
@@ -85,7 +142,18 @@ function cell(row: BudgetRow, field: EditableBudgetField) {
       <div className="panel">
         <div className="panel-head">
           <h2>Approved budget vs. expenditure — object code wise</h2>
-          <span className="note">FY 2026-27 · budget heads 3451-A215 / A224 / A233 · figures in ₹ · click a number to edit</span>
+          <div className="panel-actions">
+            <span className="note">FY 2026-27 · budget heads 3451-A215 / A224 / A233 · figures in ₹ · click a number to edit</span>
+            {pendingEdits.size > 0 && (
+              <>
+                <button className="btn" onClick={handleUndo} disabled={saving}>↩ Undo</button>
+                <button className="btn primary" onClick={handleSave} disabled={saving}>
+                  {saving ? 'Saving…' : `✓ Save (${pendingEdits.size})`}
+                </button>
+              </>
+            )}
+            <button className="btn export-btn" onClick={handleExport}>↓ Export CSV</button>
+          </div>
         </div>
         <div className="table-scroll">
           <table>

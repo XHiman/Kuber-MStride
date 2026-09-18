@@ -3,6 +3,7 @@ import { apiClient } from '../../lib/api';
 import type { Bill } from '../../types';
 import { fmtIN, fmtShort, pct } from '../bills/utils';
 import { BillCategory } from '../../types';
+import { downloadCSV } from '../../lib/export';
 
 export default function BillsTab() {
   const [bills, setBills] = useState<Bill[]>([]);
@@ -58,6 +59,23 @@ export default function BillsTab() {
     setShowModal(false);
   }
 
+  function handleExport() {
+    const rows = filtered.map(b => ({
+      '#': b.sr ?? '',
+      Vendor: b.vendor,
+      Invoice: b.invoice,
+      Date: b.date || '',
+      Amount: b.amount,
+      Stage: b.bucket,
+      Status: b.cat,
+      'Cleared FY': b.clearedFY || '',
+      Attribute: b.attribute || '',
+      Days_Pending: b.days ?? '',
+      Note: b.note || '',
+    }));
+    downloadCSV(rows, 'bills');
+  }
+
   return (
     <div className="tab-panel" id="tab-bills">
       {/* Process strip */}
@@ -96,6 +114,7 @@ export default function BillsTab() {
           <h2>Full bill register</h2>
           <div className="panel-actions">
             <span className="note">{filtered.length} of {bills.length} bills</span>
+            <button className="btn export-btn" onClick={handleExport}>↓ Export CSV</button>
             <button className="btn primary" onClick={() => { setEditingBill(null); setShowModal(true); }}>+ Add bill</button>
           </div>
         </div>
