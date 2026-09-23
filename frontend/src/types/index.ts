@@ -8,6 +8,8 @@ export interface Bill {
   invoice: string;
   date: string | null;
   amount: number;
+  budgetCode: string | null;
+  objectHead: string | null;
   bucket: string;
   cat: BillCategory;
   status: string;
@@ -29,6 +31,11 @@ export interface BudgetRow {
   exp224: number;
   prov233: number;
   exp233: number;
+  objectHead: {
+    code: string;
+    name: string;
+    nameMr: string;
+  };
 }
 
 export interface Transfer {

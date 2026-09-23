@@ -16,7 +16,9 @@ export class DistrictsService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(): Promise<DistrictRow[]> {
-    const rows = await this.prisma.district.findMany({ orderBy: { division: 'asc', district: 'asc' } });
+    const rows = await this.prisma.district.findMany({
+      orderBy: [{ division: 'asc' }, { district: 'asc' }],
+    });
     return rows.map(r => ({
       id: r.id,
       district: r.district,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../../lib/api';
 import type { BudgetRow } from '../../types';
 import { fmtIN, fmtShort, pct } from '../bills/utils';
@@ -31,10 +31,24 @@ export default function BudgetTab() {
     setRows(data.rows || []);
   }
 
+  const effectiveRows = useMemo(() => rows.map(row => ({
+    ...row,
+    ...pendingEdits.get(row.code),
+  })), [rows, pendingEdits]);
+  const rowsByCode = useMemo(
+    () => new Map(effectiveRows.map(row => [row.code, row])),
+    [effectiveRows],
+  );
+
   if (!budget) return <div className="panel"><p>Loading budget data…</p></div>;
 
+  const budgetHeads = new Map(
+    (budget.budgetHeads || []).map((head: { code: string; name: string }) => [head.code, head.name]),
+  );
+  const headLabel = (code: string, fallback: string) => budgetHeads.get(code) || fallback;
+
   function handleExport() {
-    const rows = budget.rows.map((r: BudgetRow) => ({
+    const exportRows = effectiveRows.map((r: BudgetRow) => ({
       Code: r.code,
       'Object head': r.name,
       '215_Provision': r.prov215,
@@ -49,12 +63,19 @@ export default function BudgetTab() {
       'Total_Provision': (r.prov215 || 0) + (r.prov224 || 0) + (r.prov233 || 0),
       'Total_Expenditure': (r.exp215 || 0) + (r.exp224 || 0) + (r.exp233 || 0),
     }));
-    downloadCSV(rows, 'budget');
+    downloadCSV(exportRows, 'budget');
   }
 
-  const totals = budget.totals;
-  const grandProv = budget.grandProv;
-  const grandExp = budget.grandExp;
+  const totals = effectiveRows.reduce((acc, r) => ({
+    prov215: acc.prov215 + (r.prov215 || 0),
+    exp215: acc.exp215 + (r.exp215 || 0),
+    prov224: acc.prov224 + (r.prov224 || 0),
+    exp224: acc.exp224 + (r.exp224 || 0),
+    prov233: acc.prov233 + (r.prov233 || 0),
+    exp233: acc.exp233 + (r.exp233 || 0),
+  }), { prov215: 0, exp215: 0, prov224: 0, exp224: 0, prov233: 0, exp233: 0 });
+  const grandProv = totals.prov215 + totals.prov224 + totals.prov233;
+  const grandExp = totals.exp215 + totals.exp224 + totals.exp233;
 
   type EditableBudgetField =
   | 'prov215'
@@ -125,9 +146,9 @@ function cell(row: BudgetRow, field: EditableBudgetField) {
         {[
           { lbl: 'Total approved budget (FY26-27)', val: fmtShort(grandProv), sub: '3451-A215 + A224 + A233' },
           { lbl: 'Total expenditure to date', val: fmtShort(grandExp), sub: `${pct(grandExp, grandProv)}% utilized` },
-          { lbl: '3451-A215 (PMU establishment)', val: fmtShort(totals.prov215), sub: `${fmtShort(totals.exp215)} spent · ${pct(totals.exp215, totals.prov215)}%` },
-          { lbl: '3451-A224 (IPF)', val: fmtShort(totals.prov224), sub: `${fmtShort(totals.exp224)} spent · ${pct(totals.exp224, totals.prov224)}%` },
-          { lbl: '3451-A233 (PforR)', val: fmtShort(totals.prov233), sub: `${fmtShort(totals.exp233)} spent · ${pct(totals.exp233, totals.prov233)}%` },
+          { lbl: `3451-${headLabel('A215', 'PMU establishment')}`, val: fmtShort(totals.prov215), sub: `${fmtShort(totals.exp215)} spent · ${pct(totals.exp215, totals.prov215)}%` },
+          { lbl: `3451-${headLabel('A224', 'IPF (World Bank)')}`, val: fmtShort(totals.prov224), sub: `${fmtShort(totals.exp224)} spent · ${pct(totals.exp224, totals.prov224)}%` },
+          { lbl: `3451-${headLabel('A233', 'PforR (state share)')}`, val: fmtShort(totals.prov233), sub: `${fmtShort(totals.exp233)} spent · ${pct(totals.exp233, totals.prov233)}%` },
           { lbl: 'Balance remaining', val: fmtShort(grandProv - grandExp), sub: `${pct(grandProv - grandExp, grandProv)}% of budget` },
         ].map((s, i) => (
           <div key={i} className="stat">
@@ -168,7 +189,7 @@ function cell(row: BudgetRow, field: EditableBudgetField) {
             </thead>
             <tbody>
               {BUDGET_CODE_ORDER.map(code => {
-                const r = rows.find(b => b.code === code);
+                const r = rowsByCode.get(code);
                 if (!r) return null;
                 const bal215 = (r.prov215 || 0) - (r.exp215 || 0);
                 const bal224 = (r.prov224 || 0) - (r.exp224 || 0);
@@ -178,7 +199,7 @@ function cell(row: BudgetRow, field: EditableBudgetField) {
                 return (
                   <tr key={r.code}>
                     <td className="mono">{r.code}</td>
-                    <td>{r.name}<br /><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{r.nameMr}</span></td>
+                    <td>{r.objectHead.name}<br /><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{r.objectHead.nameMr}</span></td>
                     {cell(r, 'prov215')}{cell(r, 'exp215')}<td className="num mono">{fmtIN(bal215)}</td>
                     {cell(r, 'prov224')}{cell(r, 'exp224')}<td className="num mono">{fmtIN(bal224)}</td>
                     {cell(r, 'prov233')}{cell(r, 'exp233')}<td className="num mono">{fmtIN(bal233)}</td>

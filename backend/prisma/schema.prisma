@@ -14,6 +14,10 @@ model Bill {
   invoice   String
   date      DateTime?
   amount    Float
+  budgetCode String?
+  objectHead String?
+  budgetHead BudgetHead? @relation(fields: [budgetCode], references: [code])
+  objectHeadRef ObjectHead? @relation("BillObjectHead", fields: [objectHead], references: [code])
   bucket    String
   cat       String
   status    String
@@ -29,18 +33,38 @@ model Bill {
 }
 
 model Budget {
-  id      String @id
-  code    String @unique
-  name    String
-  nameMr  String
-  prov215 Float  @default(0)
-  exp215  Float  @default(0)
-  prov224 Float  @default(0)
-  exp224  Float  @default(0)
-  prov233 Float  @default(0)
-  exp233  Float  @default(0)
+  id         String     @id
+  code       String     @unique
+  objectHead ObjectHead @relation(fields: [code], references: [code])
+  name       String
+  nameMr     String
+  prov215    Float      @default(0)
+  exp215     Float      @default(0)
+  prov224    Float      @default(0)
+  exp224     Float      @default(0)
+  prov233    Float      @default(0)
+  exp233     Float      @default(0)
 
   @@map("budgets")
+}
+
+model BudgetHead {
+  code        String @id
+  name        String
+  description String
+  bills       Bill[]
+
+  @@map("budget_heads")
+}
+
+model ObjectHead {
+  code    String   @id
+  name    String
+  nameMr  String
+  budgets Budget[]
+  bills   Bill[] @relation("BillObjectHead")
+
+  @@map("object_heads")
 }
 
 model Transfer {

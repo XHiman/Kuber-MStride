@@ -1426,8 +1426,6 @@ th.sortable .arrow {
    ========================================================= */
 
 .edit-cell {
-  display: inline-block;
-
   cursor: text;
 
   padding: 2px 4px;

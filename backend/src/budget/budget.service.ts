@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { fmtShort, pct } from '../common/bill-utils';
+import { pct } from '../common/bill-utils';
 
 export interface BudgetRow {
   id: string;
@@ -13,6 +13,11 @@ export interface BudgetRow {
   exp224: number;
   prov233: number;
   exp233: number;
+  objectHead: {
+    code: string;
+    name: string;
+    nameMr: string;
+  };
 }
 
 @Injectable()
@@ -20,7 +25,10 @@ export class BudgetService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(): Promise<BudgetRow[]> {
-    const rows = await this.prisma.budget.findMany({ orderBy: { code: 'asc' } });
+    const rows = await this.prisma.budget.findMany({
+      orderBy: { code: 'asc' },
+      include: { objectHead: true },
+    });
     return rows.map(r => ({
       id: r.id,
       code: r.code,
@@ -32,6 +40,7 @@ export class BudgetService {
       exp224: r.exp224,
       prov233: r.prov233,
       exp233: r.exp233,
+      objectHead: r.objectHead,
     }));
   }
 
@@ -40,7 +49,10 @@ export class BudgetService {
   }
 
   async getTotals() {
-    const rows = await this.findAll();
+    const [rows, budgetHeads] = await Promise.all([
+      this.findAll(),
+      this.prisma.budgetHead.findMany({ orderBy: { code: 'asc' } }),
+    ]);
     const totals = rows.reduce((acc, r) => ({
       prov215: acc.prov215 + r.prov215,
       exp215: acc.exp215 + r.exp215,
@@ -55,6 +67,7 @@ export class BudgetService {
 
     return {
       rows,
+      budgetHeads,
       totals,
       grandProv,
       grandExp,

@@ -90,6 +90,29 @@ const BILLS = [
   { sr: 10, vendor: "DMO Workshop (TRIDENT)", invoice: "(unlabeled)", date: "2026-05-12", amount: 329987, bucket: "Treasury Clearance", cat: "cleared", status: "Bill Passed 30.07.2026", attribute: "Workshop invoice — TRIDENT, Chandrapur", note: "Bill passed / cleared by treasury", days: null, source: "seed" },
 ];
 
+const BUDGET_HEADS = [
+  { code: "A215", name: "PMU establishment", description: "PMU establishment" },
+  { code: "A224", name: "IPF (World Bank)", description: "IPF (World Bank)" },
+  { code: "A233", name: "PforR (state share)", description: "PforR (state share)" },
+];
+
+const OBJECT_HEADS = [
+  { code: "01", name: "Salary", nameMr: "वेतन" },
+  { code: "06", name: "Telephone/Electricity/Water", nameMr: "दूरध्वनी, वीज व पाणी शुल्क" },
+  { code: "10", name: "Contractual Services", nameMr: "कंत्राटी सेवा" },
+  { code: "11", name: "Domestic Travel", nameMr: "देशांतर्गत प्रवास खर्च" },
+  { code: "13", name: "Office Expenses", nameMr: "कार्यालयीन खर्च" },
+  { code: "14", name: "Rent and Taxes", nameMr: "भाडेपट्टी व कर" },
+  { code: "16", name: "Publications", nameMr: "प्रकाशने" },
+  { code: "17", name: "Computer Expenses", nameMr: "संगणक खर्च" },
+  { code: "21", name: "Supplies and Materials", nameMr: "पुरवठा व सामुग्री" },
+  { code: "24", name: "Petrol/Oil/Lubricant", nameMr: "पेट्रोल, तेल व वंगण" },
+  { code: "26", name: "Advertisement and Publicity", nameMr: "जाहिरात व प्रसिद्धी" },
+  { code: "27", name: "Minor Works", nameMr: "लहान बांधकामे" },
+  { code: "28", name: "Professional Services", nameMr: "व्यावसायिक सेवा" },
+  { code: "31", name: "Grant-in-aid (non-salary)", nameMr: "सहाय्यक अनुदान (वेतनेतर)" },
+];
+
 const BUDGET = [
   { id: "01", code: "01", name: "Salary", nameMr: "वेतन", prov215: 10800000, exp215: 0, prov224: 4620000, exp224: 0, prov233: 50000000, exp233: 0 },
   { id: "06", code: "06", name: "Telephone / Electricity / Water", nameMr: "दूरध्वनी, वीज व पाणी शुल्क", prov215: 3500000, exp215: 0, prov224: 1500000, exp224: 0, prov233: 20000000, exp233: 0 },
@@ -172,6 +195,8 @@ async function main() {
   // Clear existing data
   await prisma.bill.deleteMany();
   await prisma.budget.deleteMany();
+  await prisma.objectHead.deleteMany();
+  await prisma.budgetHead.deleteMany();
   await prisma.transfer.deleteMany();
   await prisma.district.deleteMany();
 
@@ -183,6 +208,14 @@ async function main() {
         date: bill.date ? new Date(bill.date + 'T00:00:00') : null,
       },
     });
+  }
+
+  for (const head of BUDGET_HEADS) {
+    await prisma.budgetHead.create({ data: head });
+  }
+
+  for (const head of OBJECT_HEADS) {
+    await prisma.objectHead.create({ data: head });
   }
 
   // Seed budget

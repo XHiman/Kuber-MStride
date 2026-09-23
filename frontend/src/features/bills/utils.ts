@@ -5,7 +5,9 @@ export function fmtIN(n: number): string {
   const s = String(n);
   const last3 = s.slice(-3);
   const rest = s.slice(0, -3);
-  const out = (rest ? rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') : '') + ',' + last3;
+  const out = rest
+    ? `${rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',')},${last3}`
+    : last3;
   return (neg ? '-' : '') + '₹' + out;
 }
 

@@ -66,7 +66,10 @@ export class BillsService {
     };
   }
 
-  async create(data: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>): Promise<Bill> {
+  async create(
+    data: Omit<Bill, 'id' | 'createdAt' | 'updatedAt' | 'budgetCode' | 'objectHead'> &
+      Partial<Pick<Bill, 'budgetCode' | 'objectHead'>>,
+  ): Promise<Bill> {
     const cls = classifyStatus(data.status);
     return this.prisma.bill.create({
       data: { ...data, bucket: cls.bucket, cat: cls.cat },
