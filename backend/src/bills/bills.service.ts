@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Bill } from '@prisma/client';
+import { Bill, Prisma } from '@prisma/client';
 import { classifyStatus, daysPending, clearedFYOf } from '../common/bill-utils';
 
 export type BillCategory = 'cleared' | 'in_progress' | 'on_hold';
@@ -67,26 +67,109 @@ export class BillsService {
   }
 
   async create(
-    data: Omit<Bill, 'id' | 'createdAt' | 'updatedAt' | 'budgetCode' | 'objectHead'> &
-      Partial<Pick<Bill, 'budgetCode' | 'objectHead'>>,
-  ): Promise<Bill> {
-    const cls = classifyStatus(data.status);
-    return this.prisma.bill.create({
-      data: { ...data, bucket: cls.bucket, cat: cls.cat },
+  data: Omit<Bill, 'id' | 'createdAt' | 'updatedAt' | 'budgetCode' | 'objectHead' | 'transferId'> &
+    Partial<Pick<Bill, 'budgetCode' | 'objectHead' | 'transferId'>>,
+): Promise<Bill> {
+  const cls = classifyStatus(data.status);
+
+  return this.prisma.$transaction(async (tx) => {
+    const bill = await tx.bill.create({
+      data: {
+        ...data,
+        bucket: data.bucket || cls.bucket,
+        cat: cls.cat,
+      },
+    });
+    await this.applyFinancialImpact(tx, null, bill);
+    return bill;
+  });
+}
+
+  async update(
+  id: string,
+  data: Partial<Omit<Bill, 'id' | 'createdAt' | 'updatedAt' | 'date'>> & {
+    date?: Date | string | null;
+  }
+): Promise<Bill> {
+  if (data.status) {
+  const cls = classifyStatus(data.status);
+
+  data.bucket = data.bucket || cls.bucket;
+  data.cat = cls.cat;
+}
+
+  return this.prisma.$transaction(async (tx) => {
+    const previous = await tx.bill.findUniqueOrThrow({ where: { id } });
+    const updateData: Prisma.BillUpdateInput = { ...data };
+    if (data.date !== undefined) {
+      updateData.date = data.date ? new Date(data.date) : null;
+    } else {
+      delete updateData.date;
+    }
+    const bill = await tx.bill.update({
+      where: { id },
+      data: updateData,
+    });
+    await this.applyFinancialImpact(tx, previous, bill);
+    return bill;
+  });
+}
+
+  private async applyFinancialImpact(
+    tx: Prisma.TransactionClient,
+    previous: Bill | null,
+    current: Bill | null,
+  ) {
+    const oldBudget = this.budgetImpact(previous);
+    const newBudget = this.budgetImpact(current);
+    if (oldBudget) await this.adjustBudget(tx, oldBudget, -oldBudget.amount);
+    if (newBudget) await this.adjustBudget(tx, newBudget, newBudget.amount);
+
+    const oldTransfer = this.transferImpact(previous);
+    const newTransfer = this.transferImpact(current);
+    if (oldTransfer) {
+      await tx.transfer.update({
+        where: { id: oldTransfer.transferId },
+        data: { utilized: { decrement: oldTransfer.amount } },
+      });
+    }
+    if (newTransfer) {
+      await tx.transfer.update({
+        where: { id: newTransfer.transferId },
+        data: { utilized: { increment: newTransfer.amount } },
+      });
+    }
+  }
+
+  private budgetImpact(bill: Bill | null) {
+    if (!bill || bill.cat !== 'cleared' || !bill.budgetCode || !bill.objectHead) return null;
+    const fields = { A215: 'exp215', A224: 'exp224', A233: 'exp233' } as const;
+    const field = fields[bill.budgetCode as keyof typeof fields];
+    return field ? { code: bill.objectHead, field, amount: bill.amount } : null;
+  }
+
+  private transferImpact(bill: Bill | null) {
+    if (!bill || bill.cat !== 'cleared' || !bill.transferId) return null;
+    return { transferId: bill.transferId, amount: bill.amount };
+  }
+
+  private async adjustBudget(
+    tx: Prisma.TransactionClient,
+    impact: { code: string; field: 'exp215' | 'exp224' | 'exp233'; amount: number },
+    amount: number,
+  ) {
+    await tx.budget.update({
+      where: { code: impact.code },
+      data: { [impact.field]: { increment: amount } },
     });
   }
 
-  async update(id: string, data: Partial<Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>>): Promise<Bill> {
-    if (data.status) {
-      const cls = classifyStatus(data.status);
-      data.bucket = cls.bucket;
-      data.cat = cls.cat;
-    }
-    return this.prisma.bill.update({ where: { id }, data });
-  }
-
   async remove(id: string): Promise<Bill> {
-    return this.prisma.bill.delete({ where: { id } });
+    return this.prisma.$transaction(async (tx) => {
+      const bill = await tx.bill.findUniqueOrThrow({ where: { id } });
+      await this.applyFinancialImpact(tx, bill, null);
+      return tx.bill.delete({ where: { id } });
+    });
   }
 
   // Dashboard aggregation
@@ -117,7 +200,9 @@ export class BillsService {
     }
 
     // Oldest pending
-    const pending = bills.filter(b => b._days).sort((a, c) => (c._days || 0) - (a._days || 0));
+    const pending = bills
+      .filter(b => b.cat !== 'cleared' && b._days !== null && b._days >= 0)
+      .sort((a, c) => (c._days || 0) - (a._days || 0));
     const oldest = pending[0];
 
     return {

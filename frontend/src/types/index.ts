@@ -10,6 +10,7 @@ export interface Bill {
   amount: number;
   budgetCode: string | null;
   objectHead: string | null;
+  transferId: string | null;
   bucket: string;
   cat: BillCategory;
   status: string;
@@ -18,6 +19,8 @@ export interface Bill {
   days: number | null;
   clearedFY: string | null;
   source: string;
+  _days?: number | null;
+  _clearedFY?: string | null;
 }
 
 export interface BudgetRow {

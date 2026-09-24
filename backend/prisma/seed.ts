@@ -91,9 +91,9 @@ const BILLS = [
 ];
 
 const BUDGET_HEADS = [
-  { code: "A215", name: "PMU establishment", description: "PMU establishment" },
-  { code: "A224", name: "IPF (World Bank)", description: "IPF (World Bank)" },
-  { code: "A233", name: "PforR (state share)", description: "PforR (state share)" },
+  { code: "A215", name: "IPF 70 % Bank Share", description: "IPF 70 % Bank Share" },
+  { code: "A224", name: "IPF 30% State Share", description: "IPF 30% State Share" },
+  { code: "A233", name: "70% PforR - Bank Share", description: "70% PforR - Bank Share" },
 ];
 
 const OBJECT_HEADS = [

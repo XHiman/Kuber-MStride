@@ -10,6 +10,18 @@ export default function TransfersTab() {
   const [districts, setDistricts] = useState<District[]>([]);
   const [districtStats, setDistrictStats] = useState<any>(null);
   const [showModal, setShowModal] = useState(false);
+  const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null);
+
+  const [transferForm, setTransferForm] = useState({
+    recipient: '',
+    purpose: '',
+    objectCode: '01',
+    amount: 0,
+    orderDate: '',
+    status: 'transferred',
+    utilized: 0,
+    remarks: '',
+  });
 
   useEffect(() => { load(); }, []);
 
@@ -35,6 +47,48 @@ export default function TransfersTab() {
     await apiClient.districts.update(id, { [field]: value });
     load();
   }
+
+  function openAddTransfer() {
+  setEditingTransfer(null);
+  setTransferForm({
+    recipient: '',
+    purpose: '',
+    objectCode: '01',
+    amount: 0,
+    orderDate: '',
+    status: 'transferred',
+    utilized: 0,
+    remarks: '',
+  });
+  setShowModal(true);
+}
+
+function openEditTransfer(t: Transfer) {
+  setEditingTransfer(t);
+  setTransferForm({
+    recipient: t.recipient || '',
+    purpose: t.purpose || '',
+    objectCode: t.objectCode || '01',
+    amount: t.amount || 0,
+    orderDate: t.orderDate || '',
+    status: t.status || 'transferred',
+    utilized: t.utilized || 0,
+    remarks: t.remarks || '',
+  });
+  setShowModal(true);
+}
+
+async function handleTransferSave() {
+  if (editingTransfer) {
+    await apiClient.transfers.update(editingTransfer.id, transferForm);
+  } else {
+    await apiClient.transfers.create(transferForm);
+  }
+
+  setShowModal(false);
+  setEditingTransfer(null);
+  await load();
+}
 
   function handleExport() {
     const rows = transfers.map(t => ({
@@ -78,7 +132,9 @@ export default function TransfersTab() {
           <div className="panel-actions">
             <span className="note">{transfers.length} record{(transfers.length === 1 ? '' : 's')}</span>
             <button className="btn export-btn" onClick={handleExport}>↓ Export CSV</button>
-            <button className="btn primary" onClick={() => setShowModal(true)}>+ Add transfer</button>
+            <button className="btn primary" onClick={openAddTransfer}>
+  + Add transfer
+</button>
           </div>
         </div>
         <div className="table-scroll">
@@ -103,14 +159,14 @@ export default function TransfersTab() {
                   }}>{fmtIN(t.utilized)}</td>
                   <td className="num mono">{fmtIN(t.amount - t.utilized)}</td>
                   <td className="status-cell">{t.remarks || '—'}</td>
-                  <td className="row-actions"><button className="btn-icon" title="Edit">✎</button></td>
+                  <td className="row-actions"><button className="btn-icon" onClick={() => openEditTransfer(t)} title="Edit">✎</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <p className="reg-foot" style={{ marginTop: 10 }}>
-          <span>Seeded from the DDO-transfer lines in the tracker; utilization is not in the source file — add it here as UCs come in.</span>
+          <span>Seeded from the DDO-transfer lines in the tracker; utilization is not in the source file — add it here as UCs come in. Linked cleared bills are included automatically.</span>
           <span>Click "Utilized" to edit</span>
         </p>
       </div>
@@ -171,35 +227,162 @@ export default function TransfersTab() {
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className="modal-card">
-            <h3>Add transfer</h3>
-            <div className="field"><label>Recipient</label><input placeholder="e.g. District Collector, Nashik" /></div>
-            <div className="field"><label>Purpose</label><input placeholder="e.g. Contractual Services (10)" /></div>
-            <div className="field-row">
-              <div className="field"><label>Object code</label>
-                <select>
-                  {['01', '06', '10', '11', '13', '14', '16', '17', '21', '24', '26', '27', '28', '31'].map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div className="field"><label>Order date</label><input type="date" /></div>
-            </div>
-            <div className="field-row">
-              <div className="field"><label>Amount transferred (₹)</label><input type="number" min="0" step="1" /></div>
-              <div className="field"><label>Release status</label>
-                <select>
-                  <option value="transferred">Transferred</option>
-                  <option value="minutes_awaited">Minutes awaited</option>
-                </select>
-              </div>
-            </div>
-            <div className="modal-actions">
-              <button className="btn" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn primary">Save transfer</button>
-            </div>
-          </div>
+  <div
+    className="modal-overlay"
+    onClick={e => {
+      if (e.target === e.currentTarget) {
+        setShowModal(false);
+        setEditingTransfer(null);
+      }
+    }}
+  >
+    <div className="modal-card">
+      <h3>{editingTransfer ? 'Edit transfer' : 'Add transfer'}</h3>
+
+      <div className="field">
+        <label>Recipient</label>
+        <input
+          value={transferForm.recipient}
+          onChange={e =>
+            setTransferForm({ ...transferForm, recipient: e.target.value })
+          }
+          placeholder="e.g. District Collector, Nashik"
+        />
+      </div>
+
+      <div className="field">
+        <label>Purpose</label>
+        <input
+          value={transferForm.purpose}
+          onChange={e =>
+            setTransferForm({ ...transferForm, purpose: e.target.value })
+          }
+          placeholder="e.g. Contractual Services"
+        />
+      </div>
+
+      <div className="field-row">
+        <div className="field">
+          <label>Object code</label>
+          <select
+            value={transferForm.objectCode}
+            onChange={e =>
+              setTransferForm({
+                ...transferForm,
+                objectCode: e.target.value,
+              })
+            }
+          >
+            {[
+              '01', '06', '10', '11', '13', '14', '16',
+              '17', '21', '24', '26', '27', '28', '31'
+            ].map(c => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </div>
-      )}
+
+        <div className="field">
+          <label>Order date</label>
+          <input
+            type="date"
+            value={transferForm.orderDate}
+            onChange={e =>
+              setTransferForm({
+                ...transferForm,
+                orderDate: e.target.value,
+              })
+            }
+          />
+        </div>
+      </div>
+
+      <div className="field-row">
+        <div className="field">
+          <label>Amount transferred (₹)</label>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={transferForm.amount}
+            onChange={e =>
+              setTransferForm({
+                ...transferForm,
+                amount: parseFloat(e.target.value) || 0,
+              })
+            }
+          />
+        </div>
+
+        <div className="field">
+          <label>Release status</label>
+          <select
+            value={transferForm.status}
+            onChange={e =>
+              setTransferForm({
+                ...transferForm,
+                status: e.target.value,
+              })
+            }
+          >
+            <option value="transferred">Transferred</option>
+            <option value="minutes_awaited">Minutes awaited</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="field">
+        <label>Utilized to date (₹)</label>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          value={transferForm.utilized}
+          onChange={e =>
+            setTransferForm({
+              ...transferForm,
+              utilized: parseFloat(e.target.value) || 0,
+            })
+          }
+        />
+      </div>
+
+      <div className="field">
+        <label>Remarks</label>
+        <textarea
+          value={transferForm.remarks}
+          onChange={e =>
+            setTransferForm({
+              ...transferForm,
+              remarks: e.target.value,
+            })
+          }
+        />
+      </div>
+
+      <div className="modal-actions">
+        <button
+          className="btn"
+          onClick={() => {
+            setShowModal(false);
+            setEditingTransfer(null);
+          }}
+        >
+          Cancel
+        </button>
+
+        <button
+          className="btn primary"
+          onClick={handleTransferSave}
+        >
+          {editingTransfer ? 'Save changes' : 'Save transfer'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }

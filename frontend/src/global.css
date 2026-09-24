@@ -134,12 +134,12 @@
     --critical-strong: #f58b86;
     --critical-soft: #301716;
 
-    --stage-1: #405e84;
-    --stage-2: #4f8fd3;
-    --stage-3: #4285d0;
-    --stage-4: #3479c9;
-    --stage-5: #71a9e5;
-    --stage-6: #a0c9f4;
+    --stage-1: #2c349c;
+    --stage-2: #d84b4b;
+    --stage-3: #d08e42;
+    --stage-4: #bfc934;
+    --stage-5: #c6e571;
+    --stage-6: #68ec4e;
 
     --shadow-xs:
       0 1px 2px rgba(0, 0, 0, 0.30);
@@ -1195,6 +1195,23 @@ header h1 {
   background: var(--warning-soft);
   color: var(--warning);
 }
+
+.chip.stage-1,
+.chip.stage-2,
+.chip.stage-3,
+.chip.stage-4,
+.chip.stage-5,
+.chip.stage-6 {
+  background: var(--stage-color);
+  color: var(--stage-text);
+}
+
+.chip.stage-1 { --stage-color: var(--stage-1); --stage-text: #ffffff; }
+.chip.stage-2 { --stage-color: var(--stage-2); --stage-text: #17324f; }
+.chip.stage-3 { --stage-color: var(--stage-3); --stage-text: #fff; }
+.chip.stage-4 { --stage-color: var(--stage-4); --stage-text: #000000; }
+.chip.stage-5 { --stage-color: var(--stage-5); --stage-text: #000000; }
+.chip.stage-6 { --stage-color: var(--stage-6); --stage-text: #000000; }
 
 .chip .dot {
   width: 6px;

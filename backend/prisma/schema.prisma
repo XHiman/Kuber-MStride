@@ -16,8 +16,10 @@ model Bill {
   amount    Float
   budgetCode String?
   objectHead String?
+  transferId String?
   budgetHead BudgetHead? @relation(fields: [budgetCode], references: [code])
   objectHeadRef ObjectHead? @relation("BillObjectHead", fields: [objectHead], references: [code])
+  transfer Transfer? @relation(fields: [transferId], references: [id])
   bucket    String
   cat       String
   status    String
@@ -80,6 +82,7 @@ model Transfer {
   source     String    @default("seed")
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+  bills      Bill[]
 
   @@map("transfers")
 }

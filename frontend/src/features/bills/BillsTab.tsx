@@ -50,13 +50,26 @@ export default function BillsTab() {
   }, [bills]);
 
   async function handleSave(data: Partial<Bill>) {
-    if (editingBill) {
-      await apiClient.bills.update(editingBill.id, data);
-    } else {
-      await apiClient.bills.create(data);
+    try {
+      console.log('Saving bill:', data);
+
+      if (editingBill) {
+        await apiClient.bills.update(editingBill.id, data);
+      } else {
+        await apiClient.bills.create(data);
+      }
+
+      await load();
+      setShowModal(false);
+    } catch (error: any) {
+      console.error('Failed to save bill:', error);
+
+      alert(
+        error?.response?.data?.message ||
+        error?.message ||
+        'Failed to save bill. Check the browser console.'
+      );
     }
-    load();
-    setShowModal(false);
   }
 
   function handleExport() {
@@ -249,7 +262,9 @@ function VendorPanel({ bills }: { bills: Bill[] }) {
 }
 
 function ExceptionPanel({ bills }: { bills: Bill[] }) {
-  const exceptions = useMemo(() => bills.filter(b => b.cat === 'on_hold').sort((a, c) => (c.days || 0) - (a.days || 0)), [bills]);
+  const exceptions = useMemo(() => bills
+    .filter(b => b.cat === 'on_hold' && b._days !== null && b._days !== undefined)
+    .sort((a, c) => (c._days || 0) - (a._days || 0)), [bills]);
   return (
     <div className="panel">
       <div className="panel-head"><h2>On hold — needs action</h2><span className="note">{exceptions.length} bill{(exceptions.length === 1 ? '' : 's')}</span></div>
@@ -262,7 +277,7 @@ function ExceptionPanel({ bills }: { bills: Bill[] }) {
           <div className="exc-note">{b.note}</div>
           <div className="exc-meta">
             <span>{b.bucket}</span>
-            {b.days && <span className="badge-days">{b.days}d</span>}
+            {b._days !== null && b._days !== undefined && <span className="badge-days">{b._days}d</span>}
           </div>
         </div>
       ))}
@@ -271,7 +286,10 @@ function ExceptionPanel({ bills }: { bills: Bill[] }) {
 }
 
 function AgingPanel({ bills }: { bills: Bill[] }) {
-  const aging = useMemo(() => bills.filter(b => b.days).sort((a, c) => (c.days || 0) - (a.days || 0)).slice(0, 10), [bills]);
+  const aging = useMemo(() => bills
+    .filter(b => b.cat !== 'cleared' && b._days !== null && b._days !== undefined && b._days >= 0)
+    .sort((a, c) => (c._days || 0) - (a._days || 0))
+    .slice(0, 10), [bills]);
   return (
     <div className="panel">
       <div className="panel-head"><h2>Oldest pending bills</h2><span className="note">days since invoice raised, still uncleared</span></div>
@@ -287,9 +305,9 @@ function AgingPanel({ bills }: { bills: Bill[] }) {
               <tr key={b.id}>
                 <td className="vendor-cell">{b.vendor}</td>
                 <td className="inv-cell mono">{b.invoice}</td>
-                <td className="num mono">{b.days}</td>
+                <td className="num mono">{b._days}</td>
                 <td className="num amt-cell mono">{fmtIN(b.amount)}</td>
-                <td><span className={`chip ${b.cat}`}><span className="dot" />{b.bucket}</span></td>
+                <td><span className={`chip ${b.cat} ${stageClass(b.bucket)}`}><span className="dot" />{b.bucket}</span></td>
                 <td className="status-cell">{b.status}</td>
               </tr>
             ))}
@@ -361,7 +379,7 @@ function Table({ bills, sortBy, sortDir, onSort, onEdit }: TableProps) {
               <td className="inv-cell mono">{b.invoice}</td>
               <td className="mono">{b.date ? formatDate(b.date) : '—'}</td>
               <td className="num amt-cell mono">{fmtIN(b.amount)}</td>
-              <td><span className={`chip ${b.cat}`}><span className="dot" />{b.bucket}</span></td>
+              <td><span className={`chip ${b.cat} ${stageClass(b.bucket)}`}><span className="dot" />{b.bucket}</span></td>
               <td className="mono">{b.clearedFY || '—'}</td>
               <td className="status-cell">{b.attribute || '—'}</td>
               <td className="status-cell">{b.status}</td>
@@ -375,16 +393,22 @@ function Table({ bills, sortBy, sortDir, onSort, onEdit }: TableProps) {
 }
 
 function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) => void; onClose: () => void }) {
+  const [transfers, setTransfers] = useState<any[]>([]);
+  useEffect(() => {
+    apiClient.transfers.records().then(setTransfers);
+  }, []);
   const [form, setForm] = useState({
-    vendor: bill?.vendor || '',
-    invoice: bill?.invoice || '',
-    date: bill?.date || '',
-    amount: bill?.amount || '',
-    attribute: bill?.attribute || '',
-    status: bill?.status || '',
-    budgetCode: bill?.budgetCode || '',
-    objectHead: bill?.objectHead || '',
-  });
+  vendor: bill?.vendor || '',
+  invoice: bill?.invoice || '',
+  date: bill?.date || '',
+  amount: bill?.amount || '',
+  attribute: bill?.attribute || '',
+  status: bill?.status || '',
+  budgetCode: bill?.budgetCode || '',
+  objectHead: bill?.objectHead || '',
+  transferId: bill?.transferId || '',
+  bucket: bill?.bucket || 'Invoice Raised',
+});
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -393,16 +417,85 @@ function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) =
         <div className="field"><label>Vendor / DSU</label><input value={form.vendor} onChange={e => setForm({ ...form, vendor: e.target.value })} /></div>
         <div className="field-row">
           <div className="field"><label>Invoice no.</label><input value={form.invoice} onChange={e => setForm({ ...form, invoice: e.target.value })} /></div>
-          <div className="field"><label>Invoice date</label><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></div>
-          <div className="field"><label>Budget code</label><input value={form.budgetCode} onChange={e => setForm({ ...form, budgetCode: e.target.value })} /></div>
-          <div className="field"><label>Object Head</label><input value={form.objectHead} onChange={e => setForm({ ...form, objectHead: e.target.value })} /></div>
+          <div className="field"><label>Invoice date</label><input
+  type="date"
+  value={form.date}
+  onChange={e => setForm({ ...form, date: e.target.value })}
+/></div>
+          <div className="field">
+            <label>Budget code</label>
+            <select
+              value={form.budgetCode}
+              onChange={e => setForm({ ...form, budgetCode: e.target.value })}
+            >
+              <option value="">Select budget code</option>
+              <option value="A215">A215 - IPF 70 % Bank Share</option>
+              <option value="A224">A224 - IPF 30% State Share</option>
+              <option value="A233">A233 - 70% PforR - Bank Share</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Object Head</label>
+            <select
+              value={form.objectHead}
+              onChange={e => setForm({ ...form, objectHead: e.target.value })}
+            >
+              <option value="">Select Object Head</option>
+              <option value="01">01 - Salary</option>
+              <option value="06">06 - Telephone/Electricity/Water</option>
+              <option value="10">10 - Contractual Services</option>
+              <option value="11">11 - Domestic Travel</option>
+              <option value="13">13 - Office Expenses</option>
+              <option value="14">14 - Rent and Taxes</option>
+              <option value="16">16 - Publications</option>
+              <option value="17">17 - Computer Expenses</option>
+              <option value="21">21 - Supplies and Materials</option>
+              <option value="24">24 - Petrol/Oil/Lubricant</option>
+              <option value="26">26 - Advertisement and Publicity</option>
+              <option value="27">27 - Minor Works</option>
+              <option value="28">28 - Professional Services</option>
+              <option value="31">31 - Grant-in-aid (non-salary)</option>
+            </select>
+          </div>
         </div>
+        <div className="field">
+  <label>Stage</label>
+  <select
+    value={form.bucket}
+    onChange={e => setForm({ ...form, bucket: e.target.value })}
+  >
+    <option value="Invoice Raised">Invoice Raised</option>
+    <option value="PMC Check">PMC Check</option>
+    <option value="TFC/TEC Committee Approval">
+      TFC / TEC Committee Approval
+    </option>
+    <option value="Put Up on File">Put Up on File</option>
+    <option value="Sent to Treasury">Sent to Treasury</option>
+    <option value="Treasury Clearance">Treasury Clearance</option>
+  </select>
+</div>
         <div className="field"><label>Amount (₹)</label><input type="number" min="0" step="1" value={form.amount} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} /></div>
         <div className="field"><label>Payment attribute</label><input value={form.attribute} onChange={e => setForm({ ...form, attribute: e.target.value })} /></div>
+        <div className="field"><label>Linked transfer (used when cleared)</label><select value={form.transferId} onChange={e => setForm({ ...form, transferId: e.target.value })}><option value="">No linked transfer</option>{transfers.map(t => <option key={t.id} value={t.id}>{t.recipient} — {t.purpose} ({fmtIN(t.amount)})</option>)}</select></div>
         <div className="field"><label>Current status</label><textarea value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} /></div>
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={() => onSave(form)}>Save bill</button>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={async () => {
+              console.log('Save clicked');
+              await onSave({
+                ...form,
+                date: form.date || null,
+                budgetCode: form.budgetCode || null,
+                objectHead: form.objectHead || null,
+                transferId: form.transferId || null,
+              });
+            }}
+          >
+            Save bill
+          </button>
         </div>
       </div>
     </div>
@@ -414,4 +507,17 @@ function formatDate(d: string): string {
   const p = d.split('-');
   if (p.length < 3) return d;
   return `${p[2]} ${months[parseInt(p[1]) - 1]} ${p[0]}`;
+}
+
+function stageClass(bucket: string): string {
+  const stages = [
+    'Invoice Raised',
+    'PMC Check',
+    'TFC/TEC Committee Approval',
+    'Put Up on File',
+    'Sent to Treasury',
+    'Treasury Clearance',
+  ];
+  const stage = stages.indexOf(bucket) + 1;
+  return stage > 0 ? `stage-${stage}` : 'stage-1';
 }

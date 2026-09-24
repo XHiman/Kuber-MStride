@@ -3,13 +3,41 @@ const API_BASE_URL =
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
     ...options,
   });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
+
+  if (!res.ok) {
+    let errorMessage = `API error ${res.status}`;
+
+    try {
+      const errorData = await res.json();
+
+      if (typeof errorData === 'string') {
+        errorMessage = errorData;
+      } else if (errorData?.detail) {
+        errorMessage =
+          typeof errorData.detail === 'string'
+            ? errorData.detail
+            : JSON.stringify(errorData.detail);
+      } else if (errorData?.message) {
+        errorMessage = errorData.message;
+      } else {
+        errorMessage = JSON.stringify(errorData);
+      }
+    } catch {
+      const text = await res.text();
+      if (text) errorMessage = text;
+    }
+
+    throw new Error(errorMessage);
+  }
+
   return res.json();
 }
-
 export const apiClient = {
   bills: {
     list: (params?: Record<string, string>) =>

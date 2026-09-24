@@ -44,6 +44,18 @@ export class CreateBillDto {
   @IsString()
   @IsOptional()
   source: string = 'user';
+
+  @IsString()
+  @IsOptional()
+  budgetCode?: string;
+
+  @IsString()
+  @IsOptional()
+  objectHead?: string;
+
+  @IsString()
+  @IsOptional()
+  transferId?: string | null;
 }
 
 export class UpdateBillDto {
@@ -57,7 +69,7 @@ export class UpdateBillDto {
 
   @IsDateString()
   @IsOptional()
-  date?: Date;
+  date?: string | null;
 
   @IsNumber()
   @IsOptional()
@@ -74,4 +86,20 @@ export class UpdateBillDto {
   @IsString()
   @IsOptional()
   note?: string;
+
+  @IsString()
+  @IsOptional()
+  bucket?: string;
+
+  @IsString()
+  @IsOptional()
+  budgetCode?: string;
+
+  @IsString()
+  @IsOptional()
+  objectHead?: string;
+
+  @IsString()
+  @IsOptional()
+  transferId?: string | null;
 }
