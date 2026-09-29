@@ -1,122 +1,168 @@
-# MahaSTRIDE Bill & Budget Tracker
+<div align="center">
 
-A Nest.js + React application for tracking bill clearance pipeline, FY 2026-27 budget by object code, and agency fund transfers — recreated from the standalone HTML reference file.
+# MahaSTRIDE · MITRA
 
-## Project Structure
+### Bill, Budget & Fund Transfer Tracker
 
-```
-mahastride-tracker/
-├── backend/
-│   ├── src/
-│   │   ├── bills/          # Bill CRUD + dashboard aggregation
-│   │   ├── budget/         # Budget object-code table
-│   │   ├── transfers/      # Fund transfers (DDO records)
-│   │   ├── districts/      # District Incentive Fund
-│   │   ├── dashboard/      # Combined dashboard endpoint
-│   │   ├── prisma/         # Prisma service + module
-│   │   ├── common/         # Shared utilities (bill-utils.ts)
-│   │   └── main.ts         # Entry point
-│   ├── prisma/
-│   │   ├── schema.prisma   # Database schema
-│   │   └── seed.ts         # Seed data from HTML + Excel
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   ├── features/       # Tab components (bills, budget, transfers)
-│   │   ├── lib/            # API client
-│   │   ├── types/          # TypeScript interfaces
-│   │   ├── styles/         # Global CSS (mirrors HTML reference)
-│   │   └── App.tsx         # Root component
-│   └── package.json
-└── README.md
-```
+**A focused workspace for bill clearance, fiscal-year budgets and agency fund transfers.**
 
-## Quick Start
+<br />
+
+**Developer & project father:** XHiman &nbsp; · &nbsp; **Vision & brains:** Sandesh Joshi
+
+<br />
+
+![React](https://img.shields.io/badge/React-18-149ECA?style=flat-square&logo=react&logoColor=white)
+![NestJS](https://img.shields.io/badge/NestJS-10-EA2845?style=flat-square&logo=nestjs&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-5-2D3748?style=flat-square&logo=prisma&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)
+
+</div>
+
+---
+
+## At a glance
+
+MahaSTRIDE Tracker brings day-to-day financial tracking into one interface. Follow a bill from invoice to treasury clearance, compare provisions with expenditure across fiscal years, and review fund transfers by recipient—including utilization and remaining balance.
+
+The interface supports **light and dark appearance** and **English and Marathi UI labels**. Switching the display language changes static interface text; records and user-entered content remain as entered.
+
+## Workspaces
+
+| Workspace | What it helps you do |
+| --- | --- |
+| **Bills pipeline** | Track six clearance checkpoints, search and filter the register, review aging and exceptions, and export bills to CSV. |
+| **Budget by FY** | Review provisions, expenditure and balance by object code across FY 2024-25–2029-30, or use the read-only **FY Total** view. |
+| **Fund transfers** | Group transfers by recipient, record release and utilization, and track District Incentive Fund entries. |
+
+## Built with
+
+- **Frontend:** React 18, TypeScript and Vite
+- **Backend:** NestJS 10 and TypeScript
+- **Data access:** Prisma 5
+- **Database:** SQLite by default (`backend/prisma/dev.db`)
+
+## Get started
+
+### Requirements
+
+- Node.js and npm
+
+### Install and run
+
+From the repository root:
 
 ```bash
-# Install all dependencies
 npm install
-
-# Generate Prisma client
 npm run db:generate
-
-# Seed the local development database with data from the HTML/Excel reference
+npm run db:migrate
 npm run db:seed
-
-# Run both backend (port 3001) and frontend (port 3000)
 npm run dev
 ```
 
-Open http://localhost:3000 in your browser.
+Open [http://localhost:3000](http://localhost:3000). The frontend runs on port `3000`; the NestJS API runs on port `3001`.
 
-## Database
-
-The local SQLite database is at `backend/prisma/dev.db`. To reset it:
+To create a production bundle:
 
 ```bash
-npm run db:reset
+npm run build
 ```
 
-This drops all tables and re-seeds from the source data.
+## Database & deployment
 
-The production seed command (or `NODE_ENV=production npm run db:seed`) does not
-delete or repopulate bills, transfers, or district records. It ensures the
-budget/object-head lookup rows and budget rows for FY 2024-25 through FY
-2029-30 exist, preserving existing budget values. The FY 2026-27 migration
-restores the source provision figures that existed before the data wipe;
-expenditure starts at zero and grows from transfers or cleared, unlinked bills.
+The Prisma SQLite database is `backend/prisma/dev.db`. Use migrations to evolve its schema while retaining records.
 
-For the hosted service's pre-deploy command, run
-`npm run db:migrate:deploy && npm run db:seed:production`. To load budget data,
-create a CSV with the header
-below and one row per fiscal year and object code. Amounts are provisions in
-rupees under heads A215, A224, and A233. Expenditure values are managed by
-transfers and cleared bills, and are not overwritten by this importer. Import
-with `npm run db:budget:import -- backend/prisma/budget.csv`.
+> **Destructive command:** `npm run db:reset` drops and recreates the local database, then seeds it. Do not use it when you need to preserve existing records.
+
+The regular development seed loads the reference/sample data. The production-safe seed command does **not** replace bills, transfers or district records; it ensures lookup data and fiscal-year budget rows exist while preserving budget values:
+
+```bash
+npm run db:seed:production
+```
+
+For a hosted deployment, configure the service's pre-deploy step to apply pending migrations and run the production-safe seed:
+
+```bash
+npm run db:migrate:deploy && npm run db:seed:production
+```
+
+Keep the hosting build command as:
+
+```bash
+npm install && npm run build
+```
+
+Provision data separately from schema deployment. FY 2026-27 provisions are restored from the source workbook; other fiscal years should be loaded from approved figures rather than inferred.
+
+### Import budget provisions
+
+Prepare a CSV with the following header and one row per fiscal year and object code. Amounts are in rupees for heads A215, A224 and A233. The importer updates provisions; expenditure remains managed by transfers and eligible bill clearances.
 
 ```csv
 fiscalYear,objectCode,prov215,prov224,prov233
 FY 2026-27,01,10800000,4620000,50000000
 ```
 
-## Where to Edit
+Import it with:
 
-- **Business logic** (bill stage inference, FY calculation): `backend/src/common/bill-utils.ts`
-- **UI styles**: `frontend/src/styles/global.css`
-- **Data models**: `backend/prisma/schema.prisma`
-- **Seed data**: `backend/prisma/seed.ts`
-- **Tab components**: `frontend/src/features/`
+```bash
+npm run db:budget:import -- backend/prisma/budget.csv
+```
 
-## API Endpoints
+## Repository map
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/bills` | List bills (with query params) |
-| GET | `/bills/dashboard` | Dashboard aggregation stats |
-| POST | `/bills` | Create a bill |
-| PUT | `/bills/:id` | Update a bill |
-| DELETE | `/bills/:id` | Delete a bill |
-| GET | `/budget` | Budget totals + rows |
-| PUT | `/budget/:code` | Update budget expenditure |
-| GET | `/transfers/records` | All transfer records |
-| POST | `/transfers` | Create transfer |
-| PUT | `/transfers/:id` | Update transfer |
-| GET | `/districts/records` | All district records |
-| PUT | `/districts/:id` | Update district record |
+```text
+backend/
+  prisma/                 Schema, migrations, seeds and budget importer
+  src/bills/              Bill register and clearance dashboard
+  src/budget/             Fiscal-year budget and totals
+  src/transfers/          Transfer records and budget accounting
+  src/districts/          District Incentive Fund records
+  src/common/             Shared fiscal-year and bill utilities
+frontend/
+  src/App.tsx             App shell, workspace navigation and display controls
+  src/features/           Bills, budget and transfers workspaces
+  src/global.css          Design system, themes and responsive layout
+  src/lib/                API client and CSV export
+```
 
-## Query Parameters for Bills
+## Data and accounting notes
 
-- `search` — search vendor, invoice, or status
-- `vendor` — filter by vendor name
-- `stage` — filter by pipeline stage (bucket)
-- `cat` — filter by category (`cleared`, `in_progress`, `on_hold`)
-- `sortBy` — sort field (default: `amount`)
-- `sortDir` — `asc` or `desc`
+- Supported fiscal years are **FY 2024-25 through FY 2029-30**. **FY Total** aggregates these years and is read-only.
+- The fiscal-year importer does not overwrite expenditure.
+- A transferred amount affects its selected fiscal-year budget head. Edits or removal reverse the corresponding impact.
+- A cleared bill linked to a transfer updates that transfer's utilization; it is not counted against budget a second time.
+- Bill clearance year is derived from the clearance date in its status entry where available.
+- District fund entries are tracked separately from agency transfer expenditure.
 
-## Notes on Source Data
+## API overview
 
-- Bill data is seeded from the HTML file's `<script id="seed-bills">` block, cross-referenced with the Excel workbook.
-- Budget figures are from the STATUS workbook's EXPEND sheet (FY 2026-27, as on 6 Aug 2026).
-- Fund-transfer utilization starts at ₹0 for every seeded row.
-- District Incentive Fund has all 36 districts listed by division; amounts start blank.
-- Bill stage is inferred from free-text status using the same rules as the original HTML.
+The frontend communicates with the NestJS API. Common routes include:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET`, `POST` | `/bills` | List or create bills |
+| `GET` | `/bills/dashboard` | Bill pipeline summary |
+| `PUT`, `DELETE` | `/bills/:id` | Update or remove a bill |
+| `GET` | `/budget?fiscalYear=…` | Read a fiscal-year budget |
+| `PUT` | `/budget/:fiscalYear/:code` | Update a budget row |
+| `GET`, `POST` | `/transfers` | Transfer summary or create a transfer |
+| `GET` | `/transfers/records` | List transfer records |
+| `PUT`, `DELETE` | `/transfers/:id` | Update or remove a transfer |
+| `GET`, `POST` | `/districts` | District summary or create a district record |
+| `GET` | `/districts/records` | List district records |
+| `PUT` | `/districts/:id` | Update a district record |
+
+## Credits
+
+**Built and developed by XHiman** — developer and project father.
+
+**Product vision and the brains behind the project: Sandesh Joshi.**
+
+---
+
+<div align="center">
+
+Made with care for clearer financial tracking.
+
+</div>

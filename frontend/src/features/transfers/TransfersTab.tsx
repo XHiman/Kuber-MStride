@@ -1,10 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { apiClient } from '../../lib/api';
 import { FISCAL_YEARS, type Transfer, type District } from '../../types';
 import { fmtIN, fmtShort } from '../bills/utils';
 import { downloadCSV } from '../../lib/export';
+import { useAppSettings } from '../../lib/appSettings';
 
 export default function TransfersTab() {
+  const { t } = useAppSettings();
+  const translateLabel = t;
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [transferStats, setTransferStats] = useState<any>(null);
   const [districts, setDistricts] = useState<District[]>([]);
@@ -13,6 +16,9 @@ export default function TransfersTab() {
   const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null);
   const [showDistrictForm, setShowDistrictForm] = useState(false);
   const [districtForm, setDistrictForm] = useState({ district: '', division: '', amount: 0, releaseDate: '', remarks: '' });
+  const [collapsedRecipients, setCollapsedRecipients] = useState<Set<string>>(new Set());
+  const [recipientAnimations, setRecipientAnimations] = useState<Map<string, 'opening' | 'closing'>>(new Map());
+  const recipientAnimationTimers = useRef<Map<string, number>>(new Map());
 
   const transfersByRecipient = useMemo(() => {
     const groups = new Map<string, Transfer[]>();
@@ -39,6 +45,10 @@ export default function TransfersTab() {
 
   useEffect(() => { load(); }, []);
 
+  useEffect(() => () => {
+    recipientAnimationTimers.current.forEach(timer => window.clearTimeout(timer));
+  }, []);
+
   async function load() {
     const [stats, records, dStats, dRecords] = await Promise.all([
       apiClient.transfers.stats(),
@@ -52,14 +62,47 @@ export default function TransfersTab() {
     setDistricts(dRecords);
   }
 
+  function toggleRecipient(recipient: string) {
+    const isExpanded = !collapsedRecipients.has(recipient) && recipientAnimations.get(recipient) !== 'closing';
+    const shouldExpand = !isExpanded;
+    const existingTimer = recipientAnimationTimers.current.get(recipient);
+    if (existingTimer !== undefined) window.clearTimeout(existingTimer);
+
+    if (shouldExpand) {
+      setCollapsedRecipients(previous => {
+        const next = new Set(previous);
+        next.delete(recipient);
+        return next;
+      });
+    }
+    setRecipientAnimations(previous => new Map(previous).set(recipient, shouldExpand ? 'opening' : 'closing'));
+
+    const timer = window.setTimeout(() => {
+      if (!shouldExpand) {
+        setCollapsedRecipients(previous => new Set(previous).add(recipient));
+      }
+      setRecipientAnimations(previous => {
+        const next = new Map(previous);
+        next.delete(recipient);
+        return next;
+      });
+      recipientAnimationTimers.current.delete(recipient);
+    }, 180);
+    recipientAnimationTimers.current.set(recipient, timer);
+  }
+
   async function handleUtilizationEdit(id: string, value: number) {
     await apiClient.transfers.update(id, { utilized: value });
     load();
   }
 
-  async function handleDistrictEdit(id: string, field: string, value: any) {
+  async function handleDistrictEdit(
+    id: string,
+    field: 'amount' | 'releaseDate' | 'remarks',
+    value: number | string | null,
+  ) {
     await apiClient.districts.update(id, { [field]: value });
-    load();
+    await load();
   }
 
   function openAddTransfer() {
@@ -98,11 +141,11 @@ function openEditTransfer(t: Transfer) {
 
 async function handleTransferSave() {
   if (!transferForm.recipient.trim() || !transferForm.purpose.trim()) {
-    window.alert('Enter both recipient and purpose.');
+    window.alert(t('Enter both recipient and purpose.'));
     return;
   }
   if (transferForm.status === 'transferred' && !transferForm.orderDate) {
-    window.alert('Enter the transfer date for a transferred amount.');
+    window.alert(t('Enter the transfer date for a transferred amount.'));
     return;
   }
 
@@ -119,7 +162,7 @@ async function handleTransferSave() {
 
   async function handleDistrictSave() {
     if (!districtForm.district.trim() || !districtForm.division.trim()) {
-      window.alert('Enter both a district and division.');
+      window.alert(t('Enter both a district and division.'));
       return;
     }
     await apiClient.districts.create({
@@ -153,15 +196,15 @@ async function handleTransferSave() {
       {transferStats && (
         <div className="stats n4">
           {[
-            { lbl: 'Total transferred', val: fmtShort(transferStats.totalAmt), sub: `${transferStats.count} releases` },
-            { lbl: 'Utilized to date', val: fmtShort(transferStats.totalUtil), sub: `${transferStats.utilizationPct}% of transferred` },
+            { lbl: 'Total transferred', val: fmtShort(transferStats.totalAmt), sub: `${transferStats.count} ${t('releases')}` },
+            { lbl: 'Utilized to date', val: fmtShort(transferStats.totalUtil), sub: `${transferStats.utilizationPct}% ${t('of transferred')}` },
             { lbl: 'Unutilized balance', val: fmtShort(transferStats.unutilized), sub: 'awaiting UC' },
             { lbl: 'Awaiting minutes', val: transferStats.pending, sub: transferStats.pending ? 'not yet released' : 'all released' },
           ].map((s, i) => (
             <div key={i} className="stat">
-              <div className="lbl">{s.lbl}</div>
+              <div className="lbl">{t(s.lbl)}</div>
               <div className="val mono">{s.val}</div>
-              <div className="sub">{s.sub}</div>
+              <div className="sub">{t(s.sub)}</div>
             </div>
           ))}
         </div>
@@ -170,12 +213,12 @@ async function handleTransferSave() {
       {/* Transfers table */}
       <div className="panel">
         <div className="panel-head">
-          <h2>Fund transfers — agencies / DDOs</h2>
+          <h2>{t('Fund transfers — agencies / DDOs')}</h2>
           <div className="panel-actions">
-            <span className="note">{transfers.length} record{(transfers.length === 1 ? '' : 's')}</span>
-            <button className="btn export-btn" onClick={handleExport}>↓ Export CSV</button>
+            <span className="note">{transfers.length} {t(transfers.length === 1 ? 'record' : 'records')}</span>
+            <button className="btn export-btn" onClick={handleExport}>↓ {t('Export CSV')}</button>
             <button className="btn primary" onClick={openAddTransfer}>
-  + Add transfer
+  + {t('Add transfer')}
 </button>
           </div>
         </div>
@@ -183,68 +226,120 @@ async function handleTransferSave() {
           <table>
             <thead>
               <tr>
-                <th>Recipient</th><th>Purpose / object code</th><th className="num">Amount transferred</th>
-                <th>Order date</th><th>Release status</th><th className="num">Utilized to date</th><th className="num">Balance</th><th>Remarks</th><th></th>
+                <th>{t('Recipient')}</th><th>{t('Purpose / object code')}</th><th className="num">{t('Amount transferred')}</th>
+                <th>{t('Order date')}</th><th>{t('Release status')}</th><th className="num">{t('Utilized to date')}</th><th className="num">{t('Balance')}</th><th>{t('Remarks')}</th><th></th>
               </tr>
             </thead>
-            {transfersByRecipient.map(([recipient, recipientTransfers]) => (
-              <tbody key={recipient}>
+            {transfers.length === 0 ? (
+              <tbody>
+                <tr>
+                  <td className="empty-table" colSpan={9}>
+                    <div className="empty-state">
+                      <span className="empty-mark" aria-hidden="true">—</span>
+                      <span>
+                        <strong>{t('No transfers recorded')}</strong>
+                        <small>{t('Record a release to start tracking recipients, utilization, and remaining balances.')}</small>
+                      </span>
+                      <button className="btn primary" onClick={openAddTransfer}>+ {t('Add transfer')}</button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            ) : transfersByRecipient.map(([recipient, recipientTransfers]) => {
+              const collapsed = collapsedRecipients.has(recipient);
+              const animation = recipientAnimations.get(recipient);
+              const expanded = !collapsed && animation !== 'closing';
+              return (
+                <tbody key={recipient}>
                 <tr className="tot-row">
                   <td colSpan={9}>
-                    {recipient}
-                    <span className="note"> · {recipientTransfers.length} transfer{recipientTransfers.length === 1 ? '' : 's'} · {fmtIN(recipientTransfers.reduce((sum, transfer) => sum + transfer.amount, 0))} total</span>
+                    <button
+                      className="recipient-group-toggle"
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-label={`${t(expanded ? 'Collapse' : 'Expand')} ${t('transfers for')} ${recipient}`}
+                      onClick={() => toggleRecipient(recipient)}
+                    >
+                      <svg
+                        className={`recipient-chevron ${expanded ? '' : 'collapsed'}`}
+                        aria-hidden="true"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                      >
+                        <path d="m6 8 4 4 4-4" />
+                      </svg>
+                      <span className="recipient-group-name">{recipient}</span>
+                      <span className="note">· {recipientTransfers.length} {t(recipientTransfers.length === 1 ? 'transfer' : 'transfers')} · {fmtIN(recipientTransfers.reduce((sum, transfer) => sum + transfer.amount, 0))} {t('total')}</span>
+                    </button>
                   </td>
                 </tr>
-                {recipientTransfers.map(t => (
-                <tr key={t.id}>
-                  <td className="vendor-cell">{t.recipient}</td>
-                  <td className="status-cell">
-                    {t.purpose}
-                    <br /><span className="mono" style={{ color: 'var(--text-muted)' }}>{t.objectCode} · {t.fiscalYear} · {t.budgetCode || 'Unassigned'}</span>
-                  </td>
-                  <td className="num amt-cell mono">{fmtIN(t.amount)}</td>
-                  <td className="mono">{t.orderDate ? formatDate(t.orderDate) : '—'}</td>
-                  <td><span className={`chip ${t.status}`}><span className="dot" />{t.status === 'transferred' ? 'Transferred' : 'Minutes awaited'}</span></td>
-                  <td className="num mono edit-cell" contentEditable onBlur={e => {
-                    const val = parseFloat(e.currentTarget.textContent?.replace(/[^\d.-]/g, '') || '0');
-                    if (!isNaN(val)) handleUtilizationEdit(t.id, val);
-                  }}>{fmtIN(t.utilized)}</td>
-                  <td className="num mono">{fmtIN(t.amount - t.utilized)}</td>
-                  <td className="status-cell">{t.remarks || '—'}</td>
-                  <td className="row-actions"><button className="btn-icon" onClick={() => openEditTransfer(t)} title="Edit">✎</button></td>
-                </tr>
+                {(!collapsed || animation === 'closing') && recipientTransfers.map(t => (
+                  <tr key={t.id} className={`recipient-transfer-row ${animation || ''}`}>
+                    <td className="vendor-cell">{t.recipient}</td>
+                    <td className="status-cell">
+                      {t.purpose}
+                      <br /><span className="mono" style={{ color: 'var(--text-muted)' }}>{t.objectCode} · {t.fiscalYear} · {t.budgetCode || translateLabel('Unassigned')}</span>
+                    </td>
+                    <td className="num amt-cell mono">{fmtIN(t.amount)}</td>
+                    <td className="mono">{t.orderDate ? formatDate(t.orderDate) : '—'}</td>
+                    <td><span className={`chip ${t.status}`}><span className="dot" />{translateLabel(t.status === 'transferred' ? 'Transferred' : 'Minutes awaited')}</span></td>
+                    <td className="num edit-cell">
+                      <input
+                        className="table-edit-input mono"
+                        type="number"
+                        min="0"
+                        max={t.amount}
+                        step="1"
+                        aria-label={`${translateLabel('Utilized amount for')} ${t.recipient}`}
+                        defaultValue={t.utilized}
+                        onBlur={event => {
+                          const value = Number(event.currentTarget.value);
+                          if (Number.isFinite(value) && value !== t.utilized) {
+                            void handleUtilizationEdit(t.id, value);
+                          }
+                        }}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter') event.currentTarget.blur();
+                        }}
+                      />
+                    </td>
+                    <td className="num mono">{fmtIN(t.amount - t.utilized)}</td>
+                    <td className="status-cell">{t.remarks || '—'}</td>
+                    <td className="row-actions"><button className="btn-icon" onClick={() => openEditTransfer(t)} title={translateLabel('Edit')}>✎</button></td>
+                  </tr>
                 ))}
-              </tbody>
-            ))}
+                </tbody>
+              );
+            })}
           </table>
         </div>
         <p className="reg-foot" style={{ marginTop: 10 }}>
-          <span>Each row is one transfer. Linked cleared bills update that transfer’s utilized total; its amount is counted against the selected budget year/head when transferred.</span>
-          <span>Click "Utilized" to edit</span>
+          <span>{t('Each row is one transfer. Linked cleared bills update that transfer’s utilized total; its amount is counted against the selected budget year/head when transferred.')}</span>
+          <span>{t('Click "Utilized" to edit')}</span>
         </p>
       </div>
 
       {/* District Incentive Fund */}
       <div className="panel">
         <div className="panel-head">
-          <h2>District Incentive Fund — DLI-1 performance grants</h2>
+          <h2>{t('District Incentive Fund — DLI-1 performance grants')}</h2>
           <div className="panel-actions">
-            <span className="note">₹8 Cr / ₹12 Cr / ₹16 Cr brackets per qualifying district · per the Incentive GR dated 15 Apr 2026</span>
-            <button className="btn primary" onClick={() => setShowDistrictForm(true)}>+ Add district</button>
+            <span className="note">{t('₹8 Cr / ₹12 Cr / ₹16 Cr brackets per qualifying district · per the Incentive GR dated 15 Apr 2026')}</span>
+            <button className="btn primary" onClick={() => setShowDistrictForm(true)}>+ {t('Add district')}</button>
           </div>
         </div>
         {districtStats && (
           <div className="stats n4">
             {[
               { lbl: 'Districts', val: districtStats.totalDistricts, sub: 'across 6 divisions' },
-              { lbl: 'Total released', val: fmtShort(districtStats.totalReleased), sub: `${districtStats.releasedCount} district${districtStats.releasedCount !== 1 ? 's' : ''} recorded` },
+              { lbl: 'Total released', val: fmtShort(districtStats.totalReleased), sub: `${districtStats.releasedCount} ${t(districtStats.releasedCount === 1 ? 'district' : 'districts')} ${t('recorded')}` },
               { lbl: 'Awaiting release', val: districtStats.awaitingRelease, sub: 'no amount entered yet' },
               { lbl: 'Design brackets', val: districtStats.designBrackets, sub: 'per qualifying district' },
             ].map((s, i) => (
               <div key={i} className="stat">
-                <div className="lbl">{s.lbl}</div>
+                <div className="lbl">{t(s.lbl)}</div>
                 <div className="val mono">{s.val}</div>
-                <div className="sub">{s.sub}</div>
+                <div className="sub">{t(s.sub)}</div>
               </div>
             ))}
           </div>
@@ -252,33 +347,72 @@ async function handleTransferSave() {
         <div className="table-scroll" style={{ marginTop: 14 }}>
           <table>
             <thead>
-              <tr><th>District</th><th>Division</th><th className="num">Amount released</th><th>Release date</th><th>Remarks</th></tr>
+              <tr><th>{t('District')}</th><th>{t('Division')}</th><th className="num">{t('Amount released')}</th><th>{t('Release date')}</th><th>{t('Remarks')}</th></tr>
             </thead>
             <tbody>
               {districts.map(d => (
                 <tr key={d.id}>
                   <td className="vendor-cell">{d.district}</td>
                   <td className="status-cell">{d.division}</td>
-                  <td className="num mono edit-cell" contentEditable onBlur={e => {
-                    const val = parseFloat(e.currentTarget.textContent?.replace(/[^\d.-]/g, '') || '0');
-                    if (!isNaN(val)) handleDistrictEdit(d.id, 'amount', val);
-                  }}>{fmtIN(d.amount)}</td>
-                  <td className="mono edit-cell" contentEditable onBlur={e => {
-                    const val = e.currentTarget.textContent?.trim() || '';
-                    handleDistrictEdit(d.id, 'releaseDate', val === '—' ? null : val);
-                  }}>{d.releaseDate || '—'}</td>
-                  <td className="mono edit-cell" contentEditable onBlur={e => {
-                    const val = e.currentTarget.textContent?.trim() || '';
-                    handleDistrictEdit(d.id, 'remarks', val === '—' ? null : val);
-                  }}>{d.remarks || '—'}</td>
+                  <td className="num edit-cell">
+                    <input
+                      className="table-edit-input mono"
+                      type="number"
+                      min="0"
+                      step="1"
+                      aria-label={`${t('Amount released for')} ${d.district}`}
+                      defaultValue={d.amount}
+                      onBlur={event => {
+                        const value = Number(event.currentTarget.value);
+                        if (Number.isFinite(value) && value !== d.amount) {
+                          void handleDistrictEdit(d.id, 'amount', value);
+                        }
+                      }}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter') event.currentTarget.blur();
+                      }}
+                    />
+                  </td>
+                  <td className="edit-cell">
+                    <input
+                      className="table-edit-input mono"
+                      type="date"
+                      aria-label={`${t('Release date')} ${d.district}`}
+                      defaultValue={d.releaseDate || ''}
+                      onBlur={event => {
+                        const value = event.currentTarget.value || null;
+                        if (value !== d.releaseDate) {
+                          void handleDistrictEdit(d.id, 'releaseDate', value);
+                        }
+                      }}
+                    />
+                  </td>
+                  <td className="edit-cell">
+                    <input
+                      className="table-edit-input mono"
+                      type="text"
+                      aria-label={`${t('Remarks for')} ${d.district}`}
+                      defaultValue={d.remarks || ''}
+                      placeholder="—"
+                      onBlur={event => {
+                        const value = event.currentTarget.value.trim() || null;
+                        if (value !== d.remarks) {
+                          void handleDistrictEdit(d.id, 'remarks', value);
+                        }
+                      }}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter') event.currentTarget.blur();
+                      }}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <p className="reg-foot" style={{ marginTop: 10 }}>
-          <span>All 36 districts listed by division; fund design (brackets only) is finalized but district-wise qualification scoring and disbursement are not yet in any source record — fill in as SSC/Finance Dept. approves releases.</span>
-          <span>Click a cell to edit</span>
+          <span>{t('All 36 districts listed by division; fund design (brackets only) is finalized but district-wise qualification scoring and disbursement are not yet in any source record — fill in as SSC/Finance Dept. approves releases.')}</span>
+          <span>{t('Click a cell to edit')}</span>
         </p>
       </div>
 
@@ -293,33 +427,33 @@ async function handleTransferSave() {
     }}
   >
     <div className="modal-card">
-      <h3>{editingTransfer ? 'Edit transfer' : 'Add transfer'}</h3>
+      <h3>{t(editingTransfer ? 'Edit transfer' : 'Add transfer')}</h3>
 
       <div className="field">
-        <label>Recipient</label>
+        <label>{t('Recipient')}</label>
         <input
           value={transferForm.recipient}
           onChange={e =>
             setTransferForm({ ...transferForm, recipient: e.target.value })
           }
-          placeholder="e.g. District Collector, Nashik"
+          placeholder={t('e.g. District Collector, Nashik')}
         />
       </div>
 
       <div className="field">
-        <label>Purpose</label>
+        <label>{t('Purpose')}</label>
         <input
           value={transferForm.purpose}
           onChange={e =>
             setTransferForm({ ...transferForm, purpose: e.target.value })
           }
-          placeholder="e.g. Contractual Services"
+          placeholder={t('e.g. Contractual Services')}
         />
       </div>
 
       <div className="field-row">
         <div className="field">
-          <label>Object code</label>
+          <label>{t('Object code')}</label>
           <select
             value={transferForm.objectCode}
             onChange={e =>
@@ -341,18 +475,18 @@ async function handleTransferSave() {
         </div>
 
         <div className="field">
-          <label>Budget funding head</label>
+          <label>{t('Budget funding head')}</label>
           <select
             value={transferForm.budgetCode}
             onChange={event => setTransferForm({ ...transferForm, budgetCode: event.target.value })}
           >
-            <option value="A215">A215 - IPF 70 % Bank Share</option>
-            <option value="A224">A224 - IPF 30% State Share</option>
-            <option value="A233">A233 - 70% PforR - Bank Share</option>
+            <option value="A215">A215 - {t('IPF 70 % Bank Share')}</option>
+            <option value="A224">A224 - {t('IPF 30% State Share')}</option>
+            <option value="A233">A233 - {t('70% PforR - Bank Share')}</option>
           </select>
         </div>
         <div className="field">
-          <label>Fiscal year</label>
+          <label>{t('Fiscal year')}</label>
           <select
             value={transferForm.fiscalYear}
             onChange={event => setTransferForm({ ...transferForm, fiscalYear: event.target.value })}
@@ -364,7 +498,7 @@ async function handleTransferSave() {
         </div>
 
         <div className="field">
-          <label>Order date</label>
+          <label>{t('Order date')}</label>
           <input
             type="date"
             value={transferForm.orderDate}
@@ -380,7 +514,7 @@ async function handleTransferSave() {
 
       <div className="field-row">
         <div className="field">
-          <label>Amount transferred (₹)</label>
+          <label>{t('Amount transferred (₹)')}</label>
           <input
             type="number"
             min="0"
@@ -396,7 +530,7 @@ async function handleTransferSave() {
         </div>
 
         <div className="field">
-          <label>Release status</label>
+          <label>{t('Release status')}</label>
           <select
             value={transferForm.status}
             onChange={e =>
@@ -406,14 +540,14 @@ async function handleTransferSave() {
               })
             }
           >
-            <option value="transferred">Transferred</option>
-            <option value="minutes_awaited">Minutes awaited</option>
+            <option value="transferred">{t('Transferred')}</option>
+            <option value="minutes_awaited">{t('Minutes awaited')}</option>
           </select>
         </div>
       </div>
 
       <div className="field">
-        <label>Utilized to date (₹)</label>
+        <label>{t('Utilized to date (₹)')}</label>
         <input
           type="number"
           min="0"
@@ -429,7 +563,7 @@ async function handleTransferSave() {
       </div>
 
       <div className="field">
-        <label>Remarks</label>
+        <label>{t('Remarks')}</label>
         <textarea
           value={transferForm.remarks}
           onChange={e =>
@@ -449,14 +583,14 @@ async function handleTransferSave() {
             setEditingTransfer(null);
           }}
         >
-          Cancel
+          {t('Cancel')}
         </button>
 
         <button
           className="btn primary"
           onClick={handleTransferSave}
         >
-          {editingTransfer ? 'Save changes' : 'Save transfer'}
+          {t(editingTransfer ? 'Save changes' : 'Save transfer')}
         </button>
       </div>
     </div>
@@ -467,15 +601,15 @@ async function handleTransferSave() {
         if (event.target === event.currentTarget) setShowDistrictForm(false);
       }}>
         <div className="modal-card">
-          <h3>Add district record</h3>
-          <div className="field"><label>District</label><input value={districtForm.district} onChange={event => setDistrictForm({ ...districtForm, district: event.target.value })} /></div>
-          <div className="field"><label>Division</label><input value={districtForm.division} onChange={event => setDistrictForm({ ...districtForm, division: event.target.value })} /></div>
-          <div className="field"><label>Amount released (₹)</label><input type="number" min="0" step="1" value={districtForm.amount} onChange={event => setDistrictForm({ ...districtForm, amount: Number(event.target.value) || 0 })} /></div>
-          <div className="field"><label>Release date</label><input type="date" value={districtForm.releaseDate} onChange={event => setDistrictForm({ ...districtForm, releaseDate: event.target.value })} /></div>
-          <div className="field"><label>Remarks</label><textarea value={districtForm.remarks} onChange={event => setDistrictForm({ ...districtForm, remarks: event.target.value })} /></div>
+          <h3>{t('Add district record')}</h3>
+          <div className="field"><label>{t('District')}</label><input value={districtForm.district} onChange={event => setDistrictForm({ ...districtForm, district: event.target.value })} /></div>
+          <div className="field"><label>{t('Division')}</label><input value={districtForm.division} onChange={event => setDistrictForm({ ...districtForm, division: event.target.value })} /></div>
+          <div className="field"><label>{t('Amount released (₹)')}</label><input type="number" min="0" step="1" value={districtForm.amount} onChange={event => setDistrictForm({ ...districtForm, amount: Number(event.target.value) || 0 })} /></div>
+          <div className="field"><label>{t('Release date')}</label><input type="date" value={districtForm.releaseDate} onChange={event => setDistrictForm({ ...districtForm, releaseDate: event.target.value })} /></div>
+          <div className="field"><label>{t('Remarks')}</label><textarea value={districtForm.remarks} onChange={event => setDistrictForm({ ...districtForm, remarks: event.target.value })} /></div>
           <div className="modal-actions">
-            <button className="btn" onClick={() => setShowDistrictForm(false)}>Cancel</button>
-            <button className="btn primary" onClick={handleDistrictSave}>Save district</button>
+            <button className="btn" onClick={() => setShowDistrictForm(false)}>{t('Cancel')}</button>
+            <button className="btn primary" onClick={handleDistrictSave}>{t('Save district')}</button>
           </div>
         </div>
       </div>

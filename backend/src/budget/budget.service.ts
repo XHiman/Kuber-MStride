@@ -2,6 +2,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { clearedFYOf, FISCAL_YEARS, pct } from '../common/bill-utils';
 
+export const TOTAL_FISCAL_YEAR = 'FY Total';
+
 export interface BudgetRow {
   id: string;
   fiscalYear: string;
@@ -55,11 +57,13 @@ export class BudgetService {
   }
 
   async getTotals(fiscalYear: string = 'FY 2026-27') {
-    if (!FISCAL_YEARS.includes(fiscalYear)) {
+    if (fiscalYear !== TOTAL_FISCAL_YEAR && !FISCAL_YEARS.includes(fiscalYear)) {
       throw new BadRequestException(`Unsupported fiscal year: ${fiscalYear}`);
     }
     const [rows, budgetHeads] = await Promise.all([
-      this.findAll(fiscalYear),
+      fiscalYear === TOTAL_FISCAL_YEAR
+        ? this.findAllYearsTotal()
+        : this.findAll(fiscalYear),
       this.prisma.budgetHead.findMany({ orderBy: { code: 'asc' } }),
     ]);
     const totals = rows.reduce((acc, r) => ({
@@ -79,16 +83,16 @@ export class BudgetService {
     const cleared = bills.filter((bill) => bill.cat === 'cleared');
     const clearedFYAmt = cleared.reduce((sum, bill) => {
       const billFY = bill.clearedFY || clearedFYOf(bill.date);
-      return sum + (billFY === fiscalYear ? bill.amount : 0);
+      return sum + (fiscalYear === TOTAL_FISCAL_YEAR || billFY === fiscalYear ? bill.amount : 0);
     }, 0);
     const otherFYAmt = cleared.reduce((sum, bill) => {
       const billFY = bill.clearedFY || clearedFYOf(bill.date);
-      return sum + (billFY && billFY !== fiscalYear ? bill.amount : 0);
+      return sum + (fiscalYear !== TOTAL_FISCAL_YEAR && billFY && billFY !== fiscalYear ? bill.amount : 0);
     }, 0);
 
     return {
       fiscalYear,
-      fiscalYears: FISCAL_YEARS,
+      fiscalYears: [...FISCAL_YEARS, TOTAL_FISCAL_YEAR],
       rows,
       budgetHeads,
       totals,
@@ -98,14 +102,48 @@ export class BudgetService {
       utilizationPct: pct(grandExp, grandProv),
       fyCrossCheck: {
         clearedFYAmt,
-        clearedFYCount: cleared.filter((bill) => (bill.clearedFY || clearedFYOf(bill.date)) === fiscalYear).length,
+        clearedFYCount: cleared.filter((bill) => fiscalYear === TOTAL_FISCAL_YEAR || (bill.clearedFY || clearedFYOf(bill.date)) === fiscalYear).length,
         otherFYAmt,
         otherFYCount: cleared.filter((bill) => {
           const billFY = bill.clearedFY || clearedFYOf(bill.date);
-          return Boolean(billFY && billFY !== fiscalYear);
+          return fiscalYear !== TOTAL_FISCAL_YEAR && Boolean(billFY && billFY !== fiscalYear);
         }).length,
         notCleared: bills.filter((bill) => bill.cat !== 'cleared').length,
       },
     };
+  }
+
+  private async findAllYearsTotal(): Promise<BudgetRow[]> {
+    const rows = await this.prisma.budget.findMany({
+      orderBy: { code: 'asc' },
+      include: { objectHead: true },
+    });
+    const totals = new Map<string, BudgetRow>();
+
+    for (const row of rows) {
+      const total = totals.get(row.code) || {
+        id: `total:${row.code}`,
+        fiscalYear: TOTAL_FISCAL_YEAR,
+        code: row.code,
+        name: row.name,
+        nameMr: row.nameMr,
+        prov215: 0,
+        exp215: 0,
+        prov224: 0,
+        exp224: 0,
+        prov233: 0,
+        exp233: 0,
+        objectHead: row.objectHead,
+      };
+      total.prov215 += row.prov215;
+      total.exp215 += row.exp215;
+      total.prov224 += row.prov224;
+      total.exp224 += row.exp224;
+      total.prov233 += row.prov233;
+      total.exp233 += row.exp233;
+      totals.set(row.code, total);
+    }
+
+    return [...totals.values()];
   }
 }

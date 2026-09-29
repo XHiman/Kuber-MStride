@@ -4,8 +4,10 @@ import type { Bill } from '../../types';
 import { fmtIN, fmtShort, pct } from '../bills/utils';
 import { BillCategory } from '../../types';
 import { downloadCSV } from '../../lib/export';
+import { useAppSettings } from '../../lib/appSettings';
 
 export default function BillsTab() {
+  const { t } = useAppSettings();
   const [bills, setBills] = useState<Bill[]>([]);
   const [dashboard, setDashboard] = useState<any>(null);
   const [search, setSearch] = useState('');
@@ -67,7 +69,7 @@ export default function BillsTab() {
       alert(
         error?.response?.data?.message ||
         error?.message ||
-        'Failed to save bill. Check the browser console.'
+        t('Failed to save bill. Check the browser console.')
       );
     }
   }
@@ -94,8 +96,8 @@ export default function BillsTab() {
       {/* Process strip */}
       <div className="panel">
         <div className="panel-head">
-          <h2>Bill clearance process</h2>
-          <span className="note">six checkpoints tracked below, in order</span>
+          <h2>{t('Bill clearance process')}</h2>
+          <span className="note">{t('six checkpoints tracked below, in order')}</span>
         </div>
         <ProcessStrip />
       </div>
@@ -106,8 +108,8 @@ export default function BillsTab() {
       {/* Pipeline stages */}
       <div className="panel">
         <div className="panel-head">
-          <h2>Bills by pipeline stage</h2>
-          <span className="note">value currently sitting at each checkpoint (not cumulative)</span>
+          <h2>{t('Bills by pipeline stage')}</h2>
+          <span className="note">{t('value currently sitting at each checkpoint (not cumulative)')}</span>
         </div>
         <StageRow dashboard={dashboard} />
       </div>
@@ -124,18 +126,25 @@ export default function BillsTab() {
       {/* Full register */}
       <div className="panel">
         <div className="panel-head">
-          <h2>Full bill register</h2>
+          <h2>{t('Full bill register')}</h2>
           <div className="panel-actions">
-            <span className="note">{filtered.length} of {bills.length} bills</span>
-            <button className="btn export-btn" onClick={handleExport}>↓ Export CSV</button>
-            <button className="btn primary" onClick={() => { setEditingBill(null); setShowModal(true); }}>+ Add bill</button>
+            <span className="note">{filtered.length} {t('of')} {bills.length} {t('bills')}</span>
+            <button className="btn export-btn" onClick={handleExport}>↓ {t('Export CSV')}</button>
+            <button className="btn primary" onClick={() => { setEditingBill(null); setShowModal(true); }}>+ {t('Add bill')}</button>
           </div>
         </div>
         <Filters vendors={vendors} search={search} setSearch={setSearch} vendorFilter={vendorFilter} setVendorFilter={setVendorFilter} stageFilter={stageFilter} setStageFilter={setStageFilter} catFilter={catFilter} setCatFilter={setCatFilter} />
-        <Table bills={filtered} sortBy={sortBy} sortDir={sortDir} onSort={(k: BillSortKey) => { if (sortBy === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(k); setSortDir('desc'); } }} onEdit={(b: Bill) => { setEditingBill(b); setShowModal(true); }} />
+        <Table
+          bills={filtered}
+          emptyMessage={bills.length === 0 ? t('No bills have been added yet. Use “Add bill” to start the register.') : t('No bills match the selected search or filters.')}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSort={(k: BillSortKey) => { if (sortBy === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(k); setSortDir('desc'); } }}
+          onEdit={(b: Bill) => { setEditingBill(b); setShowModal(true); }}
+        />
         <div className="reg-foot">
-          <span>"#" renumbers with your current filter/sort · click Date / Amount to sort · click ✎ to edit</span>
-          <span>Filtered total: {fmtIN(filtered.reduce((s, b) => s + b.amount, 0))}</span>
+          <span>{t('"#" renumbers with your current filter/sort · click Date / Amount to sort · click ✎ to edit')}</span>
+          <span>{t('Filtered total')}: {fmtIN(filtered.reduce((s, b) => s + b.amount, 0))}</span>
         </div>
       </div>
 
@@ -145,6 +154,7 @@ export default function BillsTab() {
 }
 
 function ProcessStrip() {
+  const { t } = useAppSettings();
   return (
     <div className="process-strip">
       {[
@@ -153,7 +163,7 @@ function ProcessStrip() {
       ].map((label, i) => (
         <span key={i} className="p-step">
           <span className="dot" style={{ background: `var(--stage-${i + 1})` }} />
-          {i + 1}. {label}
+          {i + 1}. {t(label)}
         </span>
       ))}
     </div>
@@ -161,6 +171,7 @@ function ProcessStrip() {
 }
 
 function StatStrip({ dashboard }: { dashboard: any }) {
+  const { t } = useAppSettings();
   const total = dashboard.total;
   const clearedAmt = dashboard.cleared.amount;
   const inProgAmt = dashboard.inProgress.amount;
@@ -179,9 +190,9 @@ function StatStrip({ dashboard }: { dashboard: any }) {
         { lbl: 'Oldest open bill', val: dashboard.oldestPending ? `${dashboard.oldestPending.days} days` : '—', sub: dashboard.oldestPending ? `${dashboard.oldestPending.vendor} · ${fmtShort(dashboard.oldestPending.amount)}` : '' },
       ].map((s, i) => (
         <div key={i} className="stat">
-          <div className="lbl">{s.lbl}</div>
+          <div className="lbl">{t(s.lbl)}</div>
           <div className="val mono">{s.val}</div>
-          <div className={`sub ${s.cls || ''}`}>{s.sub}</div>
+          <div className={`sub ${s.cls || ''}`}>{t(s.sub)}</div>
         </div>
       ))}
     </div>
@@ -189,6 +200,7 @@ function StatStrip({ dashboard }: { dashboard: any }) {
 }
 
 function StageRow({ dashboard }: { dashboard: any }) {
+  const { t } = useAppSettings();
   const stages = [
     { key: 'Invoice Raised', short: 'Invoice raised' },
     { key: 'PMC Check', short: 'PMC check' },
@@ -209,12 +221,12 @@ function StageRow({ dashboard }: { dashboard: any }) {
         return (
           <div key={i} className="stage-card">
             <span className="stop-row">
-              <span className="snum">STAGE {i + 1}</span>
-              {a.onHold > 0 && <span className="flag">needs attention</span>}
+              <span className="snum">{t('STAGE')} {i + 1}</span>
+                {a.onHold > 0 && <span className="flag">{t('needs attention')}</span>}
             </span>
             <span className="sname">{s.short}</span>
             <span className="samt mono">{fmtShort(a.amount)}</span>
-            <span className="scount">{a.count} bill{(a.count === 1 ? '' : 's')}{a.onHold ? ` · ${a.onHold} on hold` : ''}</span>
+            <span className="scount">{a.count} {t(a.count === 1 ? 'bill' : 'bills')}{a.onHold ? ` · ${a.onHold} ${t('on hold')}` : ''}</span>
             <div className="stage-bar-track">
               <div className="stage-bar-fill" style={{ width: `${pctW}%`, background: `var(--stage-${i + 1})` }} />
             </div>
@@ -226,6 +238,7 @@ function StageRow({ dashboard }: { dashboard: any }) {
 }
 
 function VendorPanel({ bills }: { bills: Bill[] }) {
+  const { t } = useAppSettings();
   const agg = useMemo(() => {
     const map: Record<string, { cleared: number; in_progress: number; on_hold: number; total: number; count: number }> = {};
     for (const b of bills) {
@@ -240,11 +253,11 @@ function VendorPanel({ bills }: { bills: Bill[] }) {
 
   return (
     <div className="panel">
-      <div className="panel-head"><h2>By DSU / vendor</h2><span className="note">₹ value, split by clearance status</span></div>
+      <div className="panel-head"><h2>{t('By DSU / vendor')}</h2><span className="note">{t('₹ value, split by clearance status')}</span></div>
       <div className="legend-inline">
-        <span><i style={{ background: 'var(--good)' }} />Cleared</span>
-        <span><i style={{ background: 'var(--accent)' }} />In progress</span>
-        <span><i style={{ background: 'var(--critical)' }} />On hold / exception</span>
+        <span><i style={{ background: 'var(--good)' }} />{t('Cleared')}</span>
+        <span><i style={{ background: 'var(--accent)' }} />{t('In progress')}</span>
+        <span><i style={{ background: 'var(--critical)' }} />{t('On hold / exception')}</span>
       </div>
       {agg.map(([vendor, a]) => (
         <div key={vendor} className="vendor-row">
@@ -257,17 +270,19 @@ function VendorPanel({ bills }: { bills: Bill[] }) {
           <div className="vendor-amt mono">{fmtShort(a.total)}</div>
         </div>
       ))}
+      {agg.length === 0 && <EmptyState title={t('No bill activity yet')} detail={t('Vendor summaries will appear here when bills are entered.')} />}
     </div>
   );
 }
 
 function ExceptionPanel({ bills }: { bills: Bill[] }) {
+  const { t } = useAppSettings();
   const exceptions = useMemo(() => bills
     .filter(b => b.cat === 'on_hold' && b._days !== null && b._days !== undefined)
     .sort((a, c) => (c._days || 0) - (a._days || 0)), [bills]);
   return (
     <div className="panel">
-      <div className="panel-head"><h2>On hold — needs action</h2><span className="note">{exceptions.length} bill{(exceptions.length === 1 ? '' : 's')}</span></div>
+      <div className="panel-head"><h2>{t('On hold — needs action')}</h2><span className="note">{exceptions.length} {t(exceptions.length === 1 ? 'bill' : 'bills')}</span></div>
       {exceptions.map(b => (
         <div key={b.id} className="exc-item">
           <div className="exc-top">
@@ -281,23 +296,25 @@ function ExceptionPanel({ bills }: { bills: Bill[] }) {
           </div>
         </div>
       ))}
+      {exceptions.length === 0 && <EmptyState title={t('Nothing needs attention')} detail={t('On-hold bills will be listed here.')} />}
     </div>
   );
 }
 
 function AgingPanel({ bills }: { bills: Bill[] }) {
+  const { t } = useAppSettings();
   const aging = useMemo(() => bills
     .filter(b => b.cat !== 'cleared' && b._days !== null && b._days !== undefined && b._days >= 0)
     .sort((a, c) => (c._days || 0) - (a._days || 0))
     .slice(0, 10), [bills]);
   return (
     <div className="panel">
-      <div className="panel-head"><h2>Oldest pending bills</h2><span className="note">days since invoice raised, still uncleared</span></div>
+      <div className="panel-head"><h2>{t('Oldest pending bills')}</h2><span className="note">{t('days since invoice raised, still uncleared')}</span></div>
       <div className="table-scroll">
         <table>
           <thead>
             <tr>
-              <th>Vendor</th><th>Invoice</th><th className="num">Days pending</th><th className="num">Amount</th><th>Stage</th><th>Current status</th>
+              <th>{t('Vendor')}</th><th>{t('Invoice')}</th><th className="num">{t('Days pending')}</th><th className="num">{t('Amount')}</th><th>{t('Stage')}</th><th>{t('Current status')}</th>
             </tr>
           </thead>
           <tbody>
@@ -311,6 +328,9 @@ function AgingPanel({ bills }: { bills: Bill[] }) {
                 <td className="status-cell">{b.status}</td>
               </tr>
             ))}
+            {aging.length === 0 && (
+              <tr><td className="empty-table" colSpan={6}>{t('No pending bills to age.')}</td></tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -318,10 +338,20 @@ function AgingPanel({ bills }: { bills: Bill[] }) {
   );
 }
 
+function EmptyState({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="empty-state" role="status">
+      <span className="empty-mark" aria-hidden="true">—</span>
+      <span><strong>{title}</strong><small>{detail}</small></span>
+    </div>
+  );
+}
+
 function Filters({ vendors, search, setSearch, vendorFilter, setVendorFilter, stageFilter, setStageFilter, catFilter, setCatFilter }: any) {
+  const { t } = useAppSettings();
   return (
     <div className="filters">
-      <input type="text" placeholder="Search vendor, invoice no. or status…" value={search} onChange={e => setSearch(e.target.value)} />
+      <input type="text" placeholder={t('Search vendor, invoice no. or status…')} value={search} onChange={e => setSearch(e.target.value)} />
       <select value={vendorFilter} onChange={e => setVendorFilter(e.target.value)}>
         {vendors.map((vendor: string) => (
           <option key={vendor} value={vendor}>
@@ -331,14 +361,14 @@ function Filters({ vendors, search, setSearch, vendorFilter, setVendorFilter, st
         {Array.from(new Set([])).map(v => <option key={v} value={v}>{v}</option>)}
       </select>
       <select value={stageFilter} onChange={e => setStageFilter(e.target.value)}>
-        <option value="">All stages</option>
-        {['Invoice Raised', 'PMC Check', 'TFC/TEC Committee Approval', 'Put Up on File', 'Sent to Treasury', 'Treasury Clearance'].map(s => <option key={s} value={s}>{s}</option>)}
+        <option value="">{t('All stages')}</option>
+        {['Invoice Raised', 'PMC Check', 'TFC/TEC Committee Approval', 'Put Up on File', 'Sent to Treasury', 'Treasury Clearance'].map(s => <option key={s} value={s}>{t(s)}</option>)}
       </select>
       <select value={catFilter} onChange={e => setCatFilter(e.target.value)}>
-        <option value="">All statuses</option>
-        <option value="cleared">Cleared</option>
-        <option value="in_progress">In progress</option>
-        <option value="on_hold">On hold</option>
+        <option value="">{t('All statuses')}</option>
+        <option value="cleared">{t('Cleared')}</option>
+        <option value="in_progress">{t('In progress')}</option>
+        <option value="on_hold">{t('On hold')}</option>
       </select>
     </div>
   );
@@ -354,21 +384,22 @@ type BillSortKey = 'date' | 'amount';
     onEdit: (bill: Bill) => void;
   };
 
-function Table({ bills, sortBy, sortDir, onSort, onEdit }: TableProps) {
+function Table({ bills, emptyMessage, sortBy, sortDir, onSort, onEdit }: TableProps & { emptyMessage: string }) {
+  const { t } = useAppSettings();
   return (
     <div className="table-scroll">
       <table>
         <thead>
           <tr>
-            <th>#</th><th>Vendor</th><th>Invoice no.</th>
+            <th>#</th><th>{t('Vendor')}</th><th>{t('Invoice no.')}</th>
             <th className="sortable" onClick={() => onSort('date')}>
-  Date {sortBy === 'date' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+  {t('Date')} {sortBy === 'date' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
 </th>
 
 <th className="num sortable" onClick={() => onSort('amount')}>
-  Amount {sortBy === 'amount' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+  {t('Amount')} {sortBy === 'amount' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
 </th>
-            <th>Stage</th><th>Cleared FY</th><th>Payment attribute</th><th>Status / tracker remark</th><th></th>
+            <th>{t('Stage')}</th><th>{t('Cleared FY')}</th><th>{t('Payment attribute')}</th><th>{t('Status / tracker remark')}</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -383,9 +414,12 @@ function Table({ bills, sortBy, sortDir, onSort, onEdit }: TableProps) {
               <td className="mono">{b.clearedFY || '—'}</td>
               <td className="status-cell">{b.attribute || '—'}</td>
               <td className="status-cell">{b.status}</td>
-              <td className="row-actions"><button className="btn-icon" onClick={() => onEdit(b)} title="Edit">✎</button></td>
+              <td className="row-actions"><button className="btn-icon" onClick={() => onEdit(b)} title={t('Edit')}>✎</button></td>
             </tr>
           ))}
+          {bills.length === 0 && (
+            <tr><td className="empty-table" colSpan={10}>{emptyMessage}</td></tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -393,6 +427,7 @@ function Table({ bills, sortBy, sortDir, onSort, onEdit }: TableProps) {
 }
 
 function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) => void; onClose: () => void }) {
+  const { t } = useAppSettings();
   const [transfers, setTransfers] = useState<any[]>([]);
   useEffect(() => {
     apiClient.transfers.records().then(setTransfers);
@@ -413,73 +448,73 @@ function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) =
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-card">
-        <h3>{bill ? 'Edit bill' : 'Add bill'}</h3>
-        <div className="field"><label>Vendor / DSU</label><input value={form.vendor} onChange={e => setForm({ ...form, vendor: e.target.value })} /></div>
+        <h3>{t(bill ? 'Edit bill' : 'Add bill')}</h3>
+        <div className="field"><label>{t('Vendor / DSU')}</label><input value={form.vendor} onChange={e => setForm({ ...form, vendor: e.target.value })} /></div>
         <div className="field-row">
-          <div className="field"><label>Invoice no.</label><input value={form.invoice} onChange={e => setForm({ ...form, invoice: e.target.value })} /></div>
-          <div className="field"><label>Invoice date</label><input
+          <div className="field"><label>{t('Invoice no.')}</label><input value={form.invoice} onChange={e => setForm({ ...form, invoice: e.target.value })} /></div>
+          <div className="field"><label>{t('Invoice date')}</label><input
   type="date"
   value={form.date}
   onChange={e => setForm({ ...form, date: e.target.value })}
 /></div>
           <div className="field">
-            <label>Budget code</label>
+            <label>{t('Budget code')}</label>
             <select
               value={form.budgetCode}
               onChange={e => setForm({ ...form, budgetCode: e.target.value })}
             >
-              <option value="">Select budget code</option>
-              <option value="A215">A215 - IPF 70 % Bank Share</option>
-              <option value="A224">A224 - IPF 30% State Share</option>
-              <option value="A233">A233 - 70% PforR - Bank Share</option>
+              <option value="">{t('Select budget code')}</option>
+              <option value="A215">A215 - {t('IPF 70 % Bank Share')}</option>
+              <option value="A224">A224 - {t('IPF 30% State Share')}</option>
+              <option value="A233">A233 - {t('70% PforR - Bank Share')}</option>
             </select>
           </div>
           <div className="field">
-            <label>Object Head</label>
+            <label>{t('Object Head')}</label>
             <select
               value={form.objectHead}
               onChange={e => setForm({ ...form, objectHead: e.target.value })}
             >
-              <option value="">Select Object Head</option>
-              <option value="01">01 - Salary</option>
-              <option value="06">06 - Telephone/Electricity/Water</option>
-              <option value="10">10 - Contractual Services</option>
-              <option value="11">11 - Domestic Travel</option>
-              <option value="13">13 - Office Expenses</option>
-              <option value="14">14 - Rent and Taxes</option>
-              <option value="16">16 - Publications</option>
-              <option value="17">17 - Computer Expenses</option>
-              <option value="21">21 - Supplies and Materials</option>
-              <option value="24">24 - Petrol/Oil/Lubricant</option>
-              <option value="26">26 - Advertisement and Publicity</option>
-              <option value="27">27 - Minor Works</option>
-              <option value="28">28 - Professional Services</option>
-              <option value="31">31 - Grant-in-aid (non-salary)</option>
+              <option value="">{t('Select Object Head')}</option>
+              <option value="01">01 - {t('Salary')}</option>
+              <option value="06">06 - {t('Telephone/Electricity/Water')}</option>
+              <option value="10">10 - {t('Contractual Services')}</option>
+              <option value="11">11 - {t('Domestic Travel')}</option>
+              <option value="13">13 - {t('Office Expenses')}</option>
+              <option value="14">14 - {t('Rent and Taxes')}</option>
+              <option value="16">16 - {t('Publications')}</option>
+              <option value="17">17 - {t('Computer Expenses')}</option>
+              <option value="21">21 - {t('Supplies and Materials')}</option>
+              <option value="24">24 - {t('Petrol/Oil/Lubricant')}</option>
+              <option value="26">26 - {t('Advertisement and Publicity')}</option>
+              <option value="27">27 - {t('Minor Works')}</option>
+              <option value="28">28 - {t('Professional Services')}</option>
+              <option value="31">31 - {t('Grant-in-aid (non-salary)')}</option>
             </select>
           </div>
         </div>
         <div className="field">
-  <label>Stage</label>
+  <label>{t('Stage')}</label>
   <select
     value={form.bucket}
     onChange={e => setForm({ ...form, bucket: e.target.value })}
   >
-    <option value="Invoice Raised">Invoice Raised</option>
-    <option value="PMC Check">PMC Check</option>
+    <option value="Invoice Raised">{t('Invoice Raised')}</option>
+    <option value="PMC Check">{t('PMC Check')}</option>
     <option value="TFC/TEC Committee Approval">
-      TFC / TEC Committee Approval
+      {t('TFC / TEC Committee Approval')}
     </option>
-    <option value="Put Up on File">Put Up on File</option>
-    <option value="Sent to Treasury">Sent to Treasury</option>
-    <option value="Treasury Clearance">Treasury Clearance</option>
+    <option value="Put Up on File">{t('Put Up on File')}</option>
+    <option value="Sent to Treasury">{t('Sent to Treasury')}</option>
+    <option value="Treasury Clearance">{t('Treasury Clearance')}</option>
   </select>
 </div>
-        <div className="field"><label>Amount (₹)</label><input type="number" min="0" step="1" value={form.amount} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} /></div>
-        <div className="field"><label>Payment attribute</label><input value={form.attribute} onChange={e => setForm({ ...form, attribute: e.target.value })} /></div>
-        <div className="field"><label>Linked transfer (used when cleared)</label><select value={form.transferId} onChange={e => setForm({ ...form, transferId: e.target.value })}><option value="">No linked transfer</option>{transfers.map(t => <option key={t.id} value={t.id}>{t.recipient} — {t.purpose} ({fmtIN(t.amount)})</option>)}</select></div>
-        <div className="field"><label>Current status</label><textarea value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} /></div>
+        <div className="field"><label>{t('Amount (₹)')}</label><input type="number" min="0" step="1" value={form.amount} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} /></div>
+        <div className="field"><label>{t('Payment attribute')}</label><input value={form.attribute} onChange={e => setForm({ ...form, attribute: e.target.value })} /></div>
+        <div className="field"><label>{t('Linked transfer (used when cleared)')}</label><select value={form.transferId} onChange={e => setForm({ ...form, transferId: e.target.value })}><option value="">{t('No linked transfer')}</option>{transfers.map(t => <option key={t.id} value={t.id}>{t.recipient} — {t.purpose} ({fmtIN(t.amount)})</option>)}</select></div>
+        <div className="field"><label>{t('Current status')}</label><textarea value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} /></div>
         <div className="modal-actions">
-          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn" onClick={onClose}>{t('Cancel')}</button>
           <button
             type="button"
             className="btn primary"
@@ -494,7 +529,7 @@ function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) =
               });
             }}
           >
-            Save bill
+            {t('Save bill')}
           </button>
         </div>
       </div>
