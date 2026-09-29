@@ -30,7 +30,15 @@ export class DistrictsService {
   }
 
   async update(id: string, data: Partial<Omit<DistrictRow, 'id' | 'createdAt' | 'updatedAt'>>) {
-    return this.prisma.district.update({ where: { id }, data });
+    return this.prisma.district.update({
+      where: { id },
+      data: {
+        ...data,
+        ...(data.releaseDate !== undefined && {
+          releaseDate: data.releaseDate ? new Date(data.releaseDate) : null,
+        }),
+      },
+    });
   }
 
   async getStats() {

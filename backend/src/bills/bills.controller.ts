@@ -31,7 +31,11 @@ export class BillsController {
 
   @Post()
   async create(@Body() dto: CreateBillDto) {
-    return this.billsService.create({ ...dto, clearedFY: null });
+    return this.billsService.create({
+      ...dto,
+      date: dto.date ? new Date(dto.date) : null,
+      clearedFY: null,
+    });
   }
 
   @Put(':id')

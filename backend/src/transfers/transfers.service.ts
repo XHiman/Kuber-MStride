@@ -36,11 +36,24 @@ export class TransfersService {
   }
 
   async create(data: Omit<TransferRow, 'id' | 'createdAt' | 'updatedAt'>) {
-    return this.prisma.transfer.create({ data });
+    return this.prisma.transfer.create({
+      data: {
+        ...data,
+        orderDate: data.orderDate ? new Date(data.orderDate) : null,
+      },
+    });
   }
 
   async update(id: string, data: Partial<Omit<TransferRow, 'id' | 'createdAt' | 'updatedAt'>>) {
-    return this.prisma.transfer.update({ where: { id }, data });
+    return this.prisma.transfer.update({
+      where: { id },
+      data: {
+        ...data,
+        ...(data.orderDate !== undefined && {
+          orderDate: data.orderDate ? new Date(data.orderDate) : null,
+        }),
+      },
+    });
   }
 
   async remove(id: string) {

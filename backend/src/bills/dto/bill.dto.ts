@@ -9,7 +9,7 @@ export class CreateBillDto {
 
   @IsDateString()
   @IsOptional()
-  date: Date | null = null;
+  date: string | null = null;
 
   @IsNumber()
   amount!: number;
