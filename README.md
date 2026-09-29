@@ -40,8 +40,11 @@ npm install
 # Generate Prisma client
 npm run db:generate
 
-# Seed the database with data from the HTML/Excel reference
+# Seed the local development database with data from the HTML/Excel reference
 npm run db:seed
+
+# Ensure hosted lookup data without replacing existing production records
+npm run db:seed:production
 
 # Run both backend (port 3001) and frontend (port 3000)
 npm run dev
@@ -51,13 +54,19 @@ Open http://localhost:3000 in your browser.
 
 ## Database
 
-The SQLite database is at `backend/prisma/dev.db`. To reset it:
+The local SQLite database is at `backend/prisma/dev.db`. To reset it:
 
 ```bash
 npm run db:reset
 ```
 
 This drops all tables and re-seeds from the source data.
+
+The production seed command (or `NODE_ENV=production npm run db:seed`) does not
+delete or repopulate historical bills, transfers, or district records. It only
+ensures required budget/object-head lookup rows and zero-value budget rows
+exist, preserving any existing budget values. Enter production records through
+the frontend.
 
 ## Where to Edit
 

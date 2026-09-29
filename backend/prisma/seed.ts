@@ -1,5 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 
+declare const process: {
+  argv: string[];
+  env: Record<string, string | undefined>;
+  exit(code?: number): never;
+};
+
 const prisma = new PrismaClient();
 
 // Seed data extracted from the HTML file's <script id="seed-*"> blocks
@@ -190,6 +196,47 @@ const DISTRICTS = [
 ];
 
 async function main() {
+  if (process.env.NODE_ENV === 'production' || process.argv.includes('--production')) {
+    await prisma.$transaction(async (tx) => {
+      for (const head of BUDGET_HEADS) {
+        await tx.budgetHead.upsert({
+          where: { code: head.code },
+          update: {},
+          create: head,
+        });
+      }
+
+      for (const head of OBJECT_HEADS) {
+        await tx.objectHead.upsert({
+          where: { code: head.code },
+          update: {},
+          create: head,
+        });
+      }
+
+      for (const head of OBJECT_HEADS) {
+        await tx.budget.upsert({
+          where: { code: head.code },
+          update: {},
+          create: {
+            id: head.code,
+            code: head.code,
+            name: head.name,
+            nameMr: head.nameMr,
+            prov215: 0,
+            exp215: 0,
+            prov224: 0,
+            exp224: 0,
+            prov233: 0,
+            exp233: 0,
+          },
+        });
+      }
+    });
+    console.log('Ensured production lookup data; existing records were preserved.');
+    return;
+  }
+
   console.log('🌱 Seeding database...');
 
   // Clear existing data

@@ -9,6 +9,7 @@
     "db:generate": "npm run db:generate --workspace=backend",
     "db:migrate": "npm run db:migrate --workspace=backend",
     "db:seed": "npm run db:seed --workspace=backend",
+    "db:seed:production": "npm run db:seed --workspace=backend -- --production",
     "db:reset": "npm run db:reset --workspace=backend"
   },
   "devDependencies": {
