@@ -324,6 +324,32 @@ header {
   border-bottom: 1px solid var(--border);
 }
 
+header > :first-child {
+  flex: 0 0 auto;
+}
+
+header > :not(:first-child) {
+  flex: 1 1 auto;
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: 80px;
+  width: auto;
+  object-fit: contain;
+}
+
+.logo img {
+  display: block;
+  height: 100%;
+  width: auto;
+  max-width: 160px;
+  object-fit: contain;
+}
+
 .appearance-controls {
   display: flex;
   align-items: flex-end;

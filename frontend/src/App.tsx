@@ -51,6 +51,10 @@ export default function App() {
     <AppSettingsContext.Provider value={{ language, t }}>
     <div className="wrap">
       <header>
+        <div className="logo">
+          {/* <img src="/MITRALogo.svg" alt="MITRA logo" className="logo" /> */}
+          <img src="/favicon3.png" alt="XHiman logo" className="logo" />
+        </div>
         <div>
           <p className="eyebrow">
             MahaSTRIDE · MITRA{' '}
@@ -62,7 +66,7 @@ export default function App() {
           <h1>{t('Bill & Budget Tracker')}</h1>
           <p className="header-meta">
             {t('MahaSTRIDE financial operations workspace')}
-            <span className="creator-credit">{t('A project by SaJo & XHiman')}</span>
+            <span className="creator-credit">{t('A project by Sandesh & XHiman')}</span>
           </p>
         </div>
         <div className="appearance-controls">
