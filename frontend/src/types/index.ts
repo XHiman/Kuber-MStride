@@ -1,5 +1,13 @@
 export type BillCategory = 'cleared' | 'in_progress' | 'on_hold';
 export type TransferStatus = 'transferred' | 'minutes_awaited';
+export const FISCAL_YEARS = [
+  'FY 2024-25',
+  'FY 2025-26',
+  'FY 2026-27',
+  'FY 2027-28',
+  'FY 2028-29',
+  'FY 2029-30',
+];
 
 export interface Bill {
   id: string;
@@ -25,6 +33,7 @@ export interface Bill {
 
 export interface BudgetRow {
   id: string;
+  fiscalYear: string;
   code: string;
   name: string;
   nameMr: string;
@@ -46,6 +55,8 @@ export interface Transfer {
   recipient: string;
   purpose: string;
   objectCode: string;
+  fiscalYear: string;
+  budgetCode: string | null;
   amount: number;
   orderDate: string | null;
   status: TransferStatus;

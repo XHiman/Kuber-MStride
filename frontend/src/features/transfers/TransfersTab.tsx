@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../../lib/api';
-import type { Transfer, District } from '../../types';
+import { FISCAL_YEARS, type Transfer, type District } from '../../types';
 import { fmtIN, fmtShort } from '../bills/utils';
 import { downloadCSV } from '../../lib/export';
 
@@ -11,11 +11,25 @@ export default function TransfersTab() {
   const [districtStats, setDistrictStats] = useState<any>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null);
+  const [showDistrictForm, setShowDistrictForm] = useState(false);
+  const [districtForm, setDistrictForm] = useState({ district: '', division: '', amount: 0, releaseDate: '', remarks: '' });
+
+  const transfersByRecipient = useMemo(() => {
+    const groups = new Map<string, Transfer[]>();
+    for (const transfer of transfers) {
+      const recipientTransfers = groups.get(transfer.recipient) || [];
+      recipientTransfers.push(transfer);
+      groups.set(transfer.recipient, recipientTransfers);
+    }
+    return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
+  }, [transfers]);
 
   const [transferForm, setTransferForm] = useState({
     recipient: '',
     purpose: '',
     objectCode: '01',
+    fiscalYear: 'FY 2026-27',
+    budgetCode: 'A215',
     amount: 0,
     orderDate: '',
     status: 'transferred',
@@ -54,6 +68,8 @@ export default function TransfersTab() {
     recipient: '',
     purpose: '',
     objectCode: '01',
+    fiscalYear: 'FY 2026-27',
+    budgetCode: 'A215',
     amount: 0,
     orderDate: '',
     status: 'transferred',
@@ -69,6 +85,8 @@ function openEditTransfer(t: Transfer) {
     recipient: t.recipient || '',
     purpose: t.purpose || '',
     objectCode: t.objectCode || '01',
+    fiscalYear: t.fiscalYear || 'FY 2026-27',
+    budgetCode: t.budgetCode || 'A215',
     amount: t.amount || 0,
     orderDate: t.orderDate || '',
     status: t.status || 'transferred',
@@ -79,6 +97,15 @@ function openEditTransfer(t: Transfer) {
 }
 
 async function handleTransferSave() {
+  if (!transferForm.recipient.trim() || !transferForm.purpose.trim()) {
+    window.alert('Enter both recipient and purpose.');
+    return;
+  }
+  if (transferForm.status === 'transferred' && !transferForm.orderDate) {
+    window.alert('Enter the transfer date for a transferred amount.');
+    return;
+  }
+
   if (editingTransfer) {
     await apiClient.transfers.update(editingTransfer.id, transferForm);
   } else {
@@ -89,6 +116,21 @@ async function handleTransferSave() {
   setEditingTransfer(null);
   await load();
 }
+
+  async function handleDistrictSave() {
+    if (!districtForm.district.trim() || !districtForm.division.trim()) {
+      window.alert('Enter both a district and division.');
+      return;
+    }
+    await apiClient.districts.create({
+      ...districtForm,
+      releaseDate: districtForm.releaseDate || null,
+      remarks: districtForm.remarks || null,
+    });
+    setDistrictForm({ district: '', division: '', amount: 0, releaseDate: '', remarks: '' });
+    setShowDistrictForm(false);
+    await load();
+  }
 
   function handleExport() {
     const rows = transfers.map(t => ({
@@ -145,11 +187,21 @@ async function handleTransferSave() {
                 <th>Order date</th><th>Release status</th><th className="num">Utilized to date</th><th className="num">Balance</th><th>Remarks</th><th></th>
               </tr>
             </thead>
-            <tbody>
-              {transfers.map(t => (
+            {transfersByRecipient.map(([recipient, recipientTransfers]) => (
+              <tbody key={recipient}>
+                <tr className="tot-row">
+                  <td colSpan={9}>
+                    {recipient}
+                    <span className="note"> · {recipientTransfers.length} transfer{recipientTransfers.length === 1 ? '' : 's'} · {fmtIN(recipientTransfers.reduce((sum, transfer) => sum + transfer.amount, 0))} total</span>
+                  </td>
+                </tr>
+                {recipientTransfers.map(t => (
                 <tr key={t.id}>
                   <td className="vendor-cell">{t.recipient}</td>
-                  <td className="status-cell">{t.purpose} <span className="mono" style={{ color: 'var(--text-muted)' }}>({t.objectCode})</span></td>
+                  <td className="status-cell">
+                    {t.purpose}
+                    <br /><span className="mono" style={{ color: 'var(--text-muted)' }}>{t.objectCode} · {t.fiscalYear} · {t.budgetCode || 'Unassigned'}</span>
+                  </td>
                   <td className="num amt-cell mono">{fmtIN(t.amount)}</td>
                   <td className="mono">{t.orderDate ? formatDate(t.orderDate) : '—'}</td>
                   <td><span className={`chip ${t.status}`}><span className="dot" />{t.status === 'transferred' ? 'Transferred' : 'Minutes awaited'}</span></td>
@@ -161,12 +213,13 @@ async function handleTransferSave() {
                   <td className="status-cell">{t.remarks || '—'}</td>
                   <td className="row-actions"><button className="btn-icon" onClick={() => openEditTransfer(t)} title="Edit">✎</button></td>
                 </tr>
-              ))}
-            </tbody>
+                ))}
+              </tbody>
+            ))}
           </table>
         </div>
         <p className="reg-foot" style={{ marginTop: 10 }}>
-          <span>Seeded from the DDO-transfer lines in the tracker; utilization is not in the source file — add it here as UCs come in. Linked cleared bills are included automatically.</span>
+          <span>Each row is one transfer. Linked cleared bills update that transfer’s utilized total; its amount is counted against the selected budget year/head when transferred.</span>
           <span>Click "Utilized" to edit</span>
         </p>
       </div>
@@ -175,7 +228,10 @@ async function handleTransferSave() {
       <div className="panel">
         <div className="panel-head">
           <h2>District Incentive Fund — DLI-1 performance grants</h2>
-          <span className="note">₹8 Cr / ₹12 Cr / ₹16 Cr brackets per qualifying district · per the Incentive GR dated 15 Apr 2026</span>
+          <div className="panel-actions">
+            <span className="note">₹8 Cr / ₹12 Cr / ₹16 Cr brackets per qualifying district · per the Incentive GR dated 15 Apr 2026</span>
+            <button className="btn primary" onClick={() => setShowDistrictForm(true)}>+ Add district</button>
+          </div>
         </div>
         {districtStats && (
           <div className="stats n4">
@@ -285,6 +341,29 @@ async function handleTransferSave() {
         </div>
 
         <div className="field">
+          <label>Budget funding head</label>
+          <select
+            value={transferForm.budgetCode}
+            onChange={event => setTransferForm({ ...transferForm, budgetCode: event.target.value })}
+          >
+            <option value="A215">A215 - IPF 70 % Bank Share</option>
+            <option value="A224">A224 - IPF 30% State Share</option>
+            <option value="A233">A233 - 70% PforR - Bank Share</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>Fiscal year</label>
+          <select
+            value={transferForm.fiscalYear}
+            onChange={event => setTransferForm({ ...transferForm, fiscalYear: event.target.value })}
+          >
+            {FISCAL_YEARS.map(year => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
           <label>Order date</label>
           <input
             type="date"
@@ -383,6 +462,24 @@ async function handleTransferSave() {
     </div>
   </div>
 )}
+    {showDistrictForm && (
+      <div className="modal-overlay" onClick={event => {
+        if (event.target === event.currentTarget) setShowDistrictForm(false);
+      }}>
+        <div className="modal-card">
+          <h3>Add district record</h3>
+          <div className="field"><label>District</label><input value={districtForm.district} onChange={event => setDistrictForm({ ...districtForm, district: event.target.value })} /></div>
+          <div className="field"><label>Division</label><input value={districtForm.division} onChange={event => setDistrictForm({ ...districtForm, division: event.target.value })} /></div>
+          <div className="field"><label>Amount released (₹)</label><input type="number" min="0" step="1" value={districtForm.amount} onChange={event => setDistrictForm({ ...districtForm, amount: Number(event.target.value) || 0 })} /></div>
+          <div className="field"><label>Release date</label><input type="date" value={districtForm.releaseDate} onChange={event => setDistrictForm({ ...districtForm, releaseDate: event.target.value })} /></div>
+          <div className="field"><label>Remarks</label><textarea value={districtForm.remarks} onChange={event => setDistrictForm({ ...districtForm, remarks: event.target.value })} /></div>
+          <div className="modal-actions">
+            <button className="btn" onClick={() => setShowDistrictForm(false)}>Cancel</button>
+            <button className="btn primary" onClick={handleDistrictSave}>Save district</button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

@@ -9,6 +9,8 @@
     "start:prod": "node dist/main",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:budget:import": "ts-node prisma/import-budget.ts",
     "db:seed": "ts-node prisma/seed.ts",
     "db:reset": "prisma migrate reset --force && ts-node prisma/seed.ts"
   },

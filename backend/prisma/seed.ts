@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { FISCAL_YEARS } from '../src/common/bill-utils';
 
 declare const process: {
   argv: string[];
@@ -214,23 +215,29 @@ async function main() {
         });
       }
 
-      for (const head of OBJECT_HEADS) {
-        await tx.budget.upsert({
-          where: { code: head.code },
-          update: {},
-          create: {
-            id: head.code,
-            code: head.code,
-            name: head.name,
-            nameMr: head.nameMr,
-            prov215: 0,
-            exp215: 0,
-            prov224: 0,
-            exp224: 0,
-            prov233: 0,
-            exp233: 0,
-          },
-        });
+      for (const fiscalYear of FISCAL_YEARS) {
+        for (const head of OBJECT_HEADS) {
+          const source = fiscalYear === 'FY 2026-27'
+            ? BUDGET.find((budget) => budget.code === head.code)
+            : undefined;
+          await tx.budget.upsert({
+            where: { fiscalYear_code: { fiscalYear, code: head.code } },
+            update: {},
+            create: {
+              id: `${fiscalYear}:${head.code}`,
+              fiscalYear,
+              code: head.code,
+              name: source?.name || head.name,
+              nameMr: source?.nameMr || head.nameMr,
+              prov215: source?.prov215 || 0,
+              exp215: 0,
+              prov224: source?.prov224 || 0,
+              exp224: 0,
+              prov233: source?.prov233 || 0,
+              exp233: 0,
+            },
+          });
+        }
       }
     });
     console.log('Ensured production lookup data; existing records were preserved.');
@@ -268,10 +275,31 @@ async function main() {
   // Seed budget
   for (const b of BUDGET) {
     await prisma.budget.upsert({
-      where: { code: b.code },
+      where: { fiscalYear_code: { fiscalYear: 'FY 2026-27', code: b.code } },
       update: b,
       create: b,
     });
+  }
+  for (const fiscalYear of FISCAL_YEARS.filter((year) => year !== 'FY 2026-27')) {
+    for (const head of OBJECT_HEADS) {
+      await prisma.budget.upsert({
+        where: { fiscalYear_code: { fiscalYear, code: head.code } },
+        update: {},
+        create: {
+          id: `${fiscalYear}:${head.code}`,
+          fiscalYear,
+          code: head.code,
+          name: head.name,
+          nameMr: head.nameMr,
+          prov215: 0,
+          exp215: 0,
+          prov224: 0,
+          exp224: 0,
+          prov233: 0,
+          exp233: 0,
+        },
+      });
+    }
   }
 
   // Seed transfers

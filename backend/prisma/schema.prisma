@@ -36,7 +36,8 @@ model Bill {
 
 model Budget {
   id         String     @id
-  code       String     @unique
+  code       String
+  fiscalYear String     @default("FY 2026-27")
   objectHead ObjectHead @relation(fields: [code], references: [code])
   name       String
   nameMr     String
@@ -47,6 +48,7 @@ model Budget {
   prov233    Float      @default(0)
   exp233     Float      @default(0)
 
+  @@unique([fiscalYear, code])
   @@map("budgets")
 }
 
@@ -55,6 +57,7 @@ model BudgetHead {
   name        String
   description String
   bills       Bill[]
+  transfers   Transfer[]
 
   @@map("budget_heads")
 }
@@ -75,6 +78,9 @@ model Transfer {
   purpose    String
   objectCode String
   amount     Float
+  fiscalYear String    @default("FY 2026-27")
+  budgetCode String?
+  budgetHead BudgetHead? @relation(fields: [budgetCode], references: [code])
   orderDate  DateTime?
   status     String
   utilized   Float     @default(0)

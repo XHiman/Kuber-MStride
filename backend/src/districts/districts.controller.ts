@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body } from '@nestjs/common';
 import { DistrictsService } from './districts.service';
 
 @Controller('districts')
@@ -13,6 +13,11 @@ export class DistrictsController {
   @Get('records')
   async getRecords() {
     return this.districtsService.findAll();
+  }
+
+  @Post()
+  async create(@Body() data: any) {
+    return this.districtsService.create(data);
   }
 
   @Put(':id')

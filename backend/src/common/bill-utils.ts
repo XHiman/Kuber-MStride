@@ -4,6 +4,15 @@
 
 export type BillCategory = 'cleared' | 'in_progress' | 'on_hold';
 
+export const FISCAL_YEARS = Array.from({ length: 6 }, (_, index) => {
+  const startYear = 2024 + index;
+  return `FY ${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
+});
+
+export function fiscalYearOf(date: Date): string {
+  return fyOf(date.getFullYear(), date.getMonth() + 1);
+}
+
 export interface StageResult {
   stage: number;
   bucket: string;
@@ -77,7 +86,7 @@ export function fyOf(y: number, m: number): string {
 
 export function clearedFYOf(date: Date | null | undefined): string | null {
   if (!date) return null;
-  return fyOf(date.getFullYear(), date.getMonth() + 1);
+  return fiscalYearOf(date);
 }
 
 // Days pending from invoice date (for non-cleared bills)

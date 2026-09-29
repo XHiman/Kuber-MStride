@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Bill, Prisma } from '@prisma/client';
-import { classifyStatus, daysPending, clearedFYOf } from '../common/bill-utils';
+import { classifyStatus, daysPending, clearedFYOf, extractClearDate, fiscalYearOf } from '../common/bill-utils';
 
 export type BillCategory = 'cleared' | 'in_progress' | 'on_hold';
 
@@ -51,7 +51,7 @@ export class BillsService {
       ...b,
       date: b.date ? b.date.toISOString().split('T')[0] : null,
       _days: daysPending(b.cat === 'cleared' ? null : b.date),
-      _clearedFY: clearedFYOf(b.date),
+      _clearedFY: b.clearedFY || clearedFYOf(b.date),
     }));
   }
 
@@ -62,7 +62,7 @@ export class BillsService {
       ...bill,
       date: bill.date ? bill.date.toISOString().split('T')[0] : null,
       _days: daysPending(bill.cat === 'cleared' ? null : bill.date),
-      _clearedFY: clearedFYOf(bill.date),
+      _clearedFY: bill.clearedFY || clearedFYOf(bill.date),
     };
   }
 
@@ -70,14 +70,15 @@ export class BillsService {
   data: Omit<Bill, 'id' | 'createdAt' | 'updatedAt' | 'budgetCode' | 'objectHead' | 'transferId'> &
     Partial<Pick<Bill, 'budgetCode' | 'objectHead' | 'transferId'>>,
 ): Promise<Bill> {
-  const cls = classifyStatus(data.status);
+  const cls = this.classifyBill(data.status, data.bucket);
 
   return this.prisma.$transaction(async (tx) => {
     const bill = await tx.bill.create({
       data: {
         ...data,
-        bucket: data.bucket || cls.bucket,
+        bucket: cls.bucket,
         cat: cls.cat,
+        clearedFY: cls.cat === 'cleared' ? this.clearanceFiscalYear(data.status) : null,
       },
     });
     await this.applyFinancialImpact(tx, null, bill);
@@ -91,16 +92,23 @@ export class BillsService {
     date?: Date | string | null;
   }
 ): Promise<Bill> {
-  if (data.status) {
-  const cls = classifyStatus(data.status);
-
-  data.bucket = data.bucket || cls.bucket;
-  data.cat = cls.cat;
-}
+  if (data.status || data.bucket) {
+    const cls = this.classifyBill(data.status, data.bucket);
+    data.bucket = cls.bucket;
+    data.cat = cls.cat;
+  }
 
   return this.prisma.$transaction(async (tx) => {
     const previous = await tx.bill.findUniqueOrThrow({ where: { id } });
     const updateData: Prisma.BillUpdateInput = { ...data };
+    const nextCategory = data.cat || previous.cat;
+    if (nextCategory === 'cleared') {
+      updateData.clearedFY = previous.cat === 'cleared' && previous.clearedFY
+        ? previous.clearedFY
+        : this.clearanceFiscalYear(data.status || previous.status);
+    } else {
+      updateData.clearedFY = null;
+    }
     if (data.date !== undefined) {
       updateData.date = data.date ? new Date(data.date) : null;
     } else {
@@ -128,24 +136,31 @@ export class BillsService {
     const oldTransfer = this.transferImpact(previous);
     const newTransfer = this.transferImpact(current);
     if (oldTransfer) {
-      await tx.transfer.update({
+      const transfer = await tx.transfer.update({
         where: { id: oldTransfer.transferId },
         data: { utilized: { decrement: oldTransfer.amount } },
       });
+      if (transfer.utilized < 0) {
+        throw new BadRequestException('Linked utilization is below the amount being removed from this transfer.');
+      }
     }
     if (newTransfer) {
-      await tx.transfer.update({
+      const transfer = await tx.transfer.update({
         where: { id: newTransfer.transferId },
         data: { utilized: { increment: newTransfer.amount } },
       });
+      if (transfer.utilized > transfer.amount) {
+        throw new BadRequestException('Cleared bill exceeds the remaining amount on its linked transfer.');
+      }
     }
   }
 
   private budgetImpact(bill: Bill | null) {
-    if (!bill || bill.cat !== 'cleared' || !bill.budgetCode || !bill.objectHead) return null;
+    if (!bill || bill.cat !== 'cleared' || bill.transferId || !bill.budgetCode || !bill.objectHead) return null;
     const fields = { A215: 'exp215', A224: 'exp224', A233: 'exp233' } as const;
     const field = fields[bill.budgetCode as keyof typeof fields];
-    return field ? { code: bill.objectHead, field, amount: bill.amount } : null;
+    const fiscalYear = bill.clearedFY || fiscalYearOf(new Date());
+    return field ? { code: bill.objectHead, field, amount: bill.amount, fiscalYear } : null;
   }
 
   private transferImpact(bill: Bill | null) {
@@ -155,13 +170,28 @@ export class BillsService {
 
   private async adjustBudget(
     tx: Prisma.TransactionClient,
-    impact: { code: string; field: 'exp215' | 'exp224' | 'exp233'; amount: number },
+    impact: { code: string; field: 'exp215' | 'exp224' | 'exp233'; amount: number; fiscalYear: string },
     amount: number,
   ) {
     await tx.budget.update({
-      where: { code: impact.code },
+      where: { fiscalYear_code: { fiscalYear: impact.fiscalYear, code: impact.code } },
       data: { [impact.field]: { increment: amount } },
     });
+  }
+
+  private classifyBill(status: string | undefined, bucket?: string) {
+    const classified = classifyStatus(status);
+    if (bucket === 'Treasury Clearance' || classified.cat === 'cleared') {
+      return { ...classified, bucket: 'Treasury Clearance', cat: 'cleared' as const };
+    }
+    return { ...classified, bucket: bucket || classified.bucket };
+  }
+
+  private clearanceFiscalYear(status: string): string {
+    const clearDate = extractClearDate(status);
+    return clearDate
+      ? fiscalYearOf(new Date(clearDate.y, clearDate.m - 1, clearDate.d))
+      : fiscalYearOf(new Date());
   }
 
   async remove(id: string): Promise<Bill> {

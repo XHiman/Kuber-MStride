@@ -48,8 +48,8 @@ export const apiClient = {
     remove: (id: string) => api<any>(`/bills/${id}`, { method: 'DELETE' }),
   },
   budget: {
-    get: () => api<any>('/budget'),
-    update: (code: string, data: any) => api<any>(`/budget/${code}`, { method: 'PUT', body: JSON.stringify(data) }),
+    get: (fiscalYear: string) => api<any>(`/budget?${new URLSearchParams({ fiscalYear })}`),
+    update: (fiscalYear: string, code: string, data: any) => api<any>(`/budget/${encodeURIComponent(fiscalYear)}/${code}`, { method: 'PUT', body: JSON.stringify(data) }),
   },
   transfers: {
     stats: () => api<any>('/transfers'),
@@ -61,6 +61,7 @@ export const apiClient = {
   districts: {
     stats: () => api<any>('/districts'),
     records: () => api<import('../types').District[]>('/districts/records'),
+    create: (data: Omit<import('../types').District, 'id'>) => api<import('../types').District>('/districts', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => api<any>(`/districts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   },
 };

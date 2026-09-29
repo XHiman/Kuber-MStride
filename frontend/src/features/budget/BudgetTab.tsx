@@ -9,10 +9,11 @@ const BUDGET_CODE_ORDER = ['01', '06', '10', '11', '13', '14', '16', '17', '21',
 export default function BudgetTab() {
   const [budget, setBudget] = useState<any>(null);
   const [rows, setRows] = useState<BudgetRow[]>([]);
+  const [fiscalYear, setFiscalYear] = useState('FY 2026-27');
   const [pendingEdits, setPendingEdits] = useState<Map<string, Partial<BudgetRow>>>(new Map());
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [fiscalYear]);
 
   useEffect(() => {
     if (pendingEdits.size > 0) {
@@ -26,7 +27,7 @@ export default function BudgetTab() {
   }, [pendingEdits.size]);
 
   async function load() {
-    const data = await apiClient.budget.get();
+    const data = await apiClient.budget.get(fiscalYear);
     setBudget(data);
     setRows(data.rows || []);
   }
@@ -63,7 +64,7 @@ export default function BudgetTab() {
       'Total_Provision': (r.prov215 || 0) + (r.prov224 || 0) + (r.prov233 || 0),
       'Total_Expenditure': (r.exp215 || 0) + (r.exp224 || 0) + (r.exp233 || 0),
     }));
-    downloadCSV(exportRows, 'budget');
+    downloadCSV(exportRows, `budget-${fiscalYear}`);
   }
 
   const totals = effectiveRows.reduce((acc, r) => ({
@@ -103,7 +104,7 @@ async function handleSave() {
   setSaving(true);
   try {
     for (const [code, edits] of pendingEdits) {
-      await apiClient.budget.update(code, edits);
+      await apiClient.budget.update(fiscalYear, code, edits);
     }
     await load();
     setPendingEdits(new Map());
@@ -144,7 +145,7 @@ function cell(row: BudgetRow, field: EditableBudgetField) {
       {/* Budget stats */}
       <div className="stats">
         {[
-          { lbl: 'Total approved budget (FY26-27)', val: fmtShort(grandProv), sub: '3451-A215 + A224 + A233' },
+          { lbl: `Total approved budget (${fiscalYear})`, val: fmtShort(grandProv), sub: '3451-A215 + A224 + A233' },
           { lbl: 'Total expenditure to date', val: fmtShort(grandExp), sub: `${pct(grandExp, grandProv)}% utilized` },
           { lbl: `3451-${headLabel('A215', 'PMU establishment')}`, val: fmtShort(totals.prov215), sub: `${fmtShort(totals.exp215)} spent · ${pct(totals.exp215, totals.prov215)}%` },
           { lbl: `3451-${headLabel('A224', 'IPF (World Bank)')}`, val: fmtShort(totals.prov224), sub: `${fmtShort(totals.exp224)} spent · ${pct(totals.exp224, totals.prov224)}%` },
@@ -164,7 +165,18 @@ function cell(row: BudgetRow, field: EditableBudgetField) {
         <div className="panel-head">
           <h2>Approved budget vs. expenditure — object code wise</h2>
           <div className="panel-actions">
-            <span className="note">FY 2026-27 · budget heads 3451-A215 / A224 / A233 · figures in ₹ · click a number to edit</span>
+            <label className="note">
+              Fiscal year{' '}
+              <select
+                value={fiscalYear}
+                disabled={saving || pendingEdits.size > 0}
+                onChange={event => setFiscalYear(event.target.value)}
+              >
+                {(budget.fiscalYears || [fiscalYear]).map((year: string) => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </label>
             {pendingEdits.size > 0 && (
               <>
                 <button className="btn" onClick={handleUndo} disabled={saving}>↩ Undo</button>
@@ -234,7 +246,7 @@ function cell(row: BudgetRow, field: EditableBudgetField) {
       <div className="panel">
         <div className="panel-head">
           <h2>Cross-check against bill register</h2>
-          <span className="note">only bills cleared <b>in FY 2026-27</b> count toward this year's expenditure — FY 2025-26 clearances are tracked but excluded</span>
+          <span className="note">only bills cleared <b>in {fiscalYear}</b> count toward this year's expenditure</span>
         </div>
         <div className="stats n4">
           {[

@@ -43,9 +43,6 @@ npm run db:generate
 # Seed the local development database with data from the HTML/Excel reference
 npm run db:seed
 
-# Ensure hosted lookup data without replacing existing production records
-npm run db:seed:production
-
 # Run both backend (port 3001) and frontend (port 3000)
 npm run dev
 ```
@@ -63,10 +60,24 @@ npm run db:reset
 This drops all tables and re-seeds from the source data.
 
 The production seed command (or `NODE_ENV=production npm run db:seed`) does not
-delete or repopulate historical bills, transfers, or district records. It only
-ensures required budget/object-head lookup rows and zero-value budget rows
-exist, preserving any existing budget values. Enter production records through
-the frontend.
+delete or repopulate bills, transfers, or district records. It ensures the
+budget/object-head lookup rows and budget rows for FY 2024-25 through FY
+2029-30 exist, preserving existing budget values. The FY 2026-27 migration
+restores the source provision figures that existed before the data wipe;
+expenditure starts at zero and grows from transfers or cleared, unlinked bills.
+
+For the hosted service's pre-deploy command, run
+`npm run db:migrate:deploy && npm run db:seed:production`. To load budget data,
+create a CSV with the header
+below and one row per fiscal year and object code. Amounts are provisions in
+rupees under heads A215, A224, and A233. Expenditure values are managed by
+transfers and cleared bills, and are not overwritten by this importer. Import
+with `npm run db:budget:import -- backend/prisma/budget.csv`.
+
+```csv
+fiscalYear,objectCode,prov215,prov224,prov233
+FY 2026-27,01,10800000,4620000,50000000
+```
 
 ## Where to Edit
 

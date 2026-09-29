@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { fmtShort } from '../common/bill-utils';
 
@@ -11,9 +11,26 @@ export interface DistrictRow {
   remarks: string | null;
 }
 
+export type DistrictInput = Omit<DistrictRow, 'id'>;
+
 @Injectable()
 export class DistrictsService {
   constructor(private prisma: PrismaService) {}
+
+  async create(data: DistrictInput) {
+    if (!data.district.trim() || !data.division.trim()) {
+      throw new BadRequestException('District and division are required.');
+    }
+    if (!Number.isFinite(data.amount) || data.amount < 0) {
+      throw new BadRequestException('Released amount must be a non-negative number.');
+    }
+    return this.prisma.district.create({
+      data: {
+        ...data,
+        releaseDate: data.releaseDate ? new Date(data.releaseDate) : null,
+      },
+    });
+  }
 
   async findAll(): Promise<DistrictRow[]> {
     const rows = await this.prisma.district.findMany({
@@ -30,6 +47,9 @@ export class DistrictsService {
   }
 
   async update(id: string, data: Partial<Omit<DistrictRow, 'id' | 'createdAt' | 'updatedAt'>>) {
+    if (data.amount !== undefined && (!Number.isFinite(data.amount) || data.amount < 0)) {
+      throw new BadRequestException('Released amount must be a non-negative number.');
+    }
     return this.prisma.district.update({
       where: { id },
       data: {
