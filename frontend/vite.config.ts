@@ -1,8 +1,24 @@
+import { copyFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'admin-route-document',
+      writeBundle(options) {
+        if (!options.dir) {
+          throw new Error('Could not emit the admin route without a build output directory.');
+        }
+        const indexPath = resolve(options.dir, 'index.html');
+        const adminDirectory = resolve(options.dir, 'adminX');
+        mkdirSync(adminDirectory, { recursive: true });
+        copyFileSync(indexPath, resolve(adminDirectory, 'index.html'));
+      },
+    },
+  ],
   server: {
     port: 3000,
     host: true,

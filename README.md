@@ -88,6 +88,8 @@ Keep the hosting build command as:
 npm install && npm run build
 ```
 
+For the Render Static Site that serves the frontend, set its **Publish Directory** to `frontend/dist`. The build emits an `/adminX/index.html` entry so the admin URL works on direct navigation and refresh without a separate rewrite rule.
+
 Legacy seed/import files are disabled in production and their package scripts have been removed. The development seed is destructive and requires explicit `ALLOW_DESTRUCTIVE_DEV_SEED=true`; a development budget import requires `ALLOW_BUDGET_IMPORT=true`. Do not set these variables in production.
 
 ### Admin panel
