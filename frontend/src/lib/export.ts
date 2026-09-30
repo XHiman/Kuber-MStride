@@ -3,20 +3,28 @@
  * @param data - rows to export (each row is Record<string, unknown>)
  * @param filename - name without extension (defaults to "export")
  */
-export function downloadCSV(data: Record<string, unknown>[], filename = 'export') {
-  if (!data.length) return;
-
+export function formatCSV(data: Record<string, unknown>[]): string {
+  if (!data.length) return '';
   const headers = Object.keys(data[0]);
   const escape = (v: unknown): string => {
     if (v == null) return '';
     const s = String(v);
-    // Wrap in quotes if the value contains comma, quote, or newline
-    if (/[,"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    if (/[,"\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
     return s;
   };
 
-  const csv = [headers.join(','), ...data.map(row => headers.map(h => escape(row[h])).join(','))].join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel UTF-8
+  return [headers.join(','), ...data.map(row => headers.map(h => escape(row[h])).join(','))].join('\r\n');
+}
+
+export async function copyCSVToClipboard(data: Record<string, unknown>[]): Promise<void> {
+  if (!data.length) throw new Error('There is no data to export.');
+  if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable in this browser context.');
+  await navigator.clipboard.writeText(formatCSV(data));
+}
+
+export function downloadCSV(data: Record<string, unknown>[], filename = 'export') {
+  if (!data.length) return;
+  const blob = new Blob(['\uFEFF' + formatCSV(data)], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

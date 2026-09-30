@@ -2,3 +2,9 @@ node_modules/
 dist/
 favicon2.png
 favicon.svg
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example

@@ -11,11 +11,7 @@
     "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
     "db:generate": "npm run db:generate --workspace=backend",
     "db:migrate": "npm run db:migrate --workspace=backend",
-    "db:migrate:deploy": "npm run db:migrate:deploy --workspace=backend",
-    "db:budget:import": "npm run db:budget:import --workspace=backend --",
-    "db:seed": "npm run db:seed --workspace=backend",
-    "db:seed:production": "npm run db:seed --workspace=backend -- --production",
-    "db:reset": "npm run db:reset --workspace=backend"
+    "db:migrate:deploy": "npm run db:migrate:deploy --workspace=backend"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",

@@ -1,17 +1,19 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { apiClient } from '../../lib/api';
-import { FISCAL_YEARS, type Transfer, type District } from '../../types';
+import { FISCAL_YEARS, type Transfer, type District, type UserProfile } from '../../types';
 import { fmtIN, fmtShort } from '../bills/utils';
-import { downloadCSV } from '../../lib/export';
 import { useAppSettings } from '../../lib/appSettings';
+import ExportActions from '../../components/ExportActions';
+import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
 
-export default function TransfersTab() {
+export default function TransfersTab({ globalQuery = '' }: { globalQuery?: string }) {
   const { t } = useAppSettings();
   const translateLabel = t;
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [transferStats, setTransferStats] = useState<any>(null);
   const [districts, setDistricts] = useState<District[]>([]);
   const [districtStats, setDistrictStats] = useState<any>(null);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null);
   const [showDistrictForm, setShowDistrictForm] = useState(false);
@@ -20,24 +22,51 @@ export default function TransfersTab() {
   const [recipientAnimations, setRecipientAnimations] = useState<Map<string, 'opening' | 'closing'>>(new Map());
   const recipientAnimationTimers = useRef<Map<string, number>>(new Map());
 
+  const visibleTransfers = useMemo(() => {
+    const terms = globalQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    return transfers.filter(transfer => {
+      const value = `${transfer.recipient} ${transfer.purpose} ${transfer.objectCode} ${transfer.fiscalYear} ${transfer.budgetCode || ''} ${transfer.status} ${transfer.remarks || ''} ${transfer.amount} ${transfer.orderDate || ''}`.toLowerCase();
+      return terms.every(term => value.includes(term));
+    });
+  }, [transfers, globalQuery]);
+
+  const visibleDistricts = useMemo(() => {
+    const terms = globalQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    return districts.filter(district => {
+      const value = `${district.district} ${district.division} ${district.remarks || ''} ${district.amount} ${district.releaseDate || ''}`.toLowerCase();
+      return terms.every(term => value.includes(term));
+    });
+  }, [districts, globalQuery]);
+
+  const programOptions = useMemo(() => [...new Set([
+    ...users.flatMap(user => user.programs),
+    ...transfers.filter(transfer => transfer.scopeType === 'program').map(transfer => transfer.recipient),
+  ])].sort((left, right) => left.localeCompare(right)), [transfers, users]);
+  const districtOptions = useMemo(() => [...new Set([
+    ...districts.map(district => district.district),
+    ...users.flatMap(user => user.districts),
+    ...transfers.filter(transfer => transfer.scopeType === 'district').map(transfer => transfer.recipient),
+  ])].sort((left, right) => left.localeCompare(right)), [districts, transfers, users]);
+
   const transfersByRecipient = useMemo(() => {
     const groups = new Map<string, Transfer[]>();
-    for (const transfer of transfers) {
+    for (const transfer of visibleTransfers) {
       const recipientTransfers = groups.get(transfer.recipient) || [];
       recipientTransfers.push(transfer);
       groups.set(transfer.recipient, recipientTransfers);
     }
     return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
-  }, [transfers]);
+  }, [visibleTransfers]);
 
   const [transferForm, setTransferForm] = useState({
     recipient: '',
+    scopeType: 'program' as ProgramDistrictType,
     purpose: '',
     objectCode: '01',
     fiscalYear: 'FY 2026-27',
     budgetCode: 'A215',
     amount: 0,
-    orderDate: '',
+    orderDate: localToday(),
     status: 'transferred',
     utilized: 0,
     remarks: '',
@@ -50,16 +79,18 @@ export default function TransfersTab() {
   }, []);
 
   async function load() {
-    const [stats, records, dStats, dRecords] = await Promise.all([
+    const [stats, records, dStats, dRecords, people] = await Promise.all([
       apiClient.transfers.stats(),
       apiClient.transfers.records(),
       apiClient.districts.stats(),
       apiClient.districts.records(),
+      apiClient.users.list(),
     ]);
     setTransferStats(stats);
     setTransfers(records);
     setDistrictStats(dStats);
     setDistricts(dRecords);
+    setUsers(people);
   }
 
   function toggleRecipient(recipient: string) {
@@ -106,38 +137,62 @@ export default function TransfersTab() {
   }
 
   function openAddTransfer() {
-  setEditingTransfer(null);
-  setTransferForm({
-    recipient: '',
-    purpose: '',
-    objectCode: '01',
-    fiscalYear: 'FY 2026-27',
-    budgetCode: 'A215',
-    amount: 0,
-    orderDate: '',
-    status: 'transferred',
-    utilized: 0,
-    remarks: '',
-  });
-  setShowModal(true);
-}
+    setEditingTransfer(null);
+    setTransferForm({
+      recipient: '',
+      scopeType: 'program',
+      purpose: '',
+      objectCode: '01',
+      fiscalYear: 'FY 2026-27',
+      budgetCode: 'A215',
+      amount: 0,
+      orderDate: localToday(),
+      status: 'transferred',
+      utilized: 0,
+      remarks: '',
+    });
+    setShowModal(true);
+  }
 
-function openEditTransfer(t: Transfer) {
-  setEditingTransfer(t);
-  setTransferForm({
-    recipient: t.recipient || '',
-    purpose: t.purpose || '',
-    objectCode: t.objectCode || '01',
-    fiscalYear: t.fiscalYear || 'FY 2026-27',
-    budgetCode: t.budgetCode || 'A215',
-    amount: t.amount || 0,
-    orderDate: t.orderDate || '',
-    status: t.status || 'transferred',
-    utilized: t.utilized || 0,
-    remarks: t.remarks || '',
-  });
-  setShowModal(true);
-}
+  function openEditTransfer(t: Transfer) {
+    setEditingTransfer(t);
+    setTransferForm({
+      recipient: t.recipient || '',
+      scopeType: t.scopeType || 'program',
+      purpose: t.purpose || '',
+      objectCode: t.objectCode || '01',
+      fiscalYear: t.fiscalYear || 'FY 2026-27',
+      budgetCode: t.budgetCode || 'A215',
+      amount: t.amount || 0,
+      orderDate: t.orderDate || localToday(),
+      status: t.status || 'transferred',
+      utilized: t.utilized || 0,
+      remarks: t.remarks || '',
+    });
+    setShowModal(true);
+  }
+
+  function selectRecipient(recipient: string, scopeType: ProgramDistrictType) {
+    const preferences = transfers.filter(transfer => transfer.recipient === recipient && transfer.scopeType === scopeType);
+    const counts = new Map<string, { count: number; purpose: string; objectCode: string }>();
+    for (const transfer of preferences) {
+      const key = `${transfer.purpose}\u0000${transfer.objectCode}`;
+      const existing = counts.get(key);
+      counts.set(key, {
+        count: (existing?.count || 0) + 1,
+        purpose: transfer.purpose,
+        objectCode: transfer.objectCode,
+      });
+    }
+    const frequent = [...counts.values()].sort((left, right) => right.count - left.count)[0];
+    setTransferForm(previous => ({
+      ...previous,
+      recipient,
+      scopeType,
+      purpose: frequent?.purpose || '',
+      objectCode: frequent?.objectCode || '01',
+    }));
+  }
 
 async function handleTransferSave() {
   if (!transferForm.recipient.trim() || !transferForm.purpose.trim()) {
@@ -175,19 +230,38 @@ async function handleTransferSave() {
     await load();
   }
 
-  function handleExport() {
-    const rows = transfers.map(t => ({
+  function getExportRows() {
+    return visibleTransfers.flatMap(t => {
+      const utilizationUpdates = t.history.filter(entry => entry.field === 'utilized');
+      const lastUtilizationUpdate = utilizationUpdates[utilizationUpdates.length - 1]?.changedAt || '';
+      const base = {
       Recipient: t.recipient,
+      'Recipient type': t.scopeType || '',
       Purpose: t.purpose,
       'Object Code': t.objectCode,
+      'Fiscal year': t.fiscalYear,
+      'Budget funding head': t.budgetCode || '',
       Amount: t.amount,
       'Order Date': t.orderDate || '',
       Status: t.status,
       Utilized: t.utilized,
       Balance: t.amount - t.utilized,
       Remarks: t.remarks || '',
-    }));
-    downloadCSV(rows, 'transfers');
+      'Created At': t.createdAt,
+      'Last Updated At': t.updatedAt,
+      'Utilization Updated At': lastUtilizationUpdate,
+      };
+      if (!t.history.length) {
+        return [{ ...base, 'Change Date': '', 'Changed Field': '', 'Previous Value': '', 'New Value': '' }];
+      }
+      return t.history.map(entry => ({
+        ...base,
+        'Change Date': entry.changedAt,
+        'Changed Field': entry.field,
+        'Previous Value': entry.oldValue || '',
+        'New Value': entry.newValue || '',
+      }));
+    });
   }
 
   return (
@@ -215,8 +289,8 @@ async function handleTransferSave() {
         <div className="panel-head">
           <h2>{t('Fund transfers — agencies / DDOs')}</h2>
           <div className="panel-actions">
-            <span className="note">{transfers.length} {t(transfers.length === 1 ? 'record' : 'records')}</span>
-            <button className="btn export-btn" onClick={handleExport}>↓ {t('Export CSV')}</button>
+            <span className="note">{visibleTransfers.length} {t(visibleTransfers.length === 1 ? 'record' : 'records')}</span>
+            <ExportActions getRows={getExportRows} filename="transfers" />
             <button className="btn primary" onClick={openAddTransfer}>
   + {t('Add transfer')}
 </button>
@@ -230,7 +304,7 @@ async function handleTransferSave() {
                 <th>{t('Order date')}</th><th>{t('Release status')}</th><th className="num">{t('Utilized to date')}</th><th className="num">{t('Balance')}</th><th>{t('Remarks')}</th><th></th>
               </tr>
             </thead>
-            {transfers.length === 0 ? (
+            {visibleTransfers.length === 0 ? (
               <tbody>
                 <tr>
                   <td className="empty-table" colSpan={9}>
@@ -350,7 +424,7 @@ async function handleTransferSave() {
               <tr><th>{t('District')}</th><th>{t('Division')}</th><th className="num">{t('Amount released')}</th><th>{t('Release date')}</th><th>{t('Remarks')}</th></tr>
             </thead>
             <tbody>
-              {districts.map(d => (
+              {visibleDistricts.map(d => (
                 <tr key={d.id}>
                   <td className="vendor-cell">{d.district}</td>
                   <td className="status-cell">{d.division}</td>
@@ -429,16 +503,15 @@ async function handleTransferSave() {
     <div className="modal-card">
       <h3>{t(editingTransfer ? 'Edit transfer' : 'Add transfer')}</h3>
 
-      <div className="field">
-        <label>{t('Recipient')}</label>
-        <input
+      <ProgramDistrictField
+          label="Recipient — Program or District"
+          type={transferForm.scopeType}
           value={transferForm.recipient}
-          onChange={e =>
-            setTransferForm({ ...transferForm, recipient: e.target.value })
-          }
-          placeholder={t('e.g. District Collector, Nashik')}
-        />
-      </div>
+          programs={[...programOptions, ...(transferForm.scopeType === 'program' && transferForm.recipient ? [transferForm.recipient] : [])]}
+          districts={[...districtOptions, ...(transferForm.scopeType === 'district' && transferForm.recipient ? [transferForm.recipient] : [])]}
+          onTypeChange={type => selectRecipient(transferForm.recipient, type)}
+          onValueChange={recipient => selectRecipient(recipient, transferForm.scopeType)}
+      />
 
       <div className="field">
         <label>{t('Purpose')}</label>
@@ -623,4 +696,9 @@ function formatDate(d: string): string {
   const p = d.split('-');
   if (p.length < 3) return d;
   return `${p[2]} ${months[parseInt(p[1]) - 1]} ${p[0]}`;
+}
+
+function localToday(): string {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 }

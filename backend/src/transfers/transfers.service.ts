@@ -8,6 +8,7 @@ export type TransferStatus = 'transferred' | 'minutes_awaited';
 export interface TransferRow {
   id: string;
   recipient: string;
+  scopeType: 'program' | 'district' | null;
   purpose: string;
   objectCode: string;
   fiscalYear: string;
@@ -17,9 +18,17 @@ export interface TransferRow {
   status: TransferStatus;
   utilized: number;
   remarks: string | null;
+  createdAt: string;
+  updatedAt: string;
+  history: {
+    changedAt: string;
+    field: string;
+    oldValue: string | null;
+    newValue: string | null;
+  }[];
 }
 
-export type TransferInput = Omit<TransferRow, 'id'>;
+export type TransferInput = Omit<TransferRow, 'id' | 'createdAt' | 'updatedAt' | 'history'>;
 
 @Injectable()
 export class TransfersService {
@@ -28,10 +37,12 @@ export class TransfersService {
   async findAll(): Promise<TransferRow[]> {
     const rows = await this.prisma.transfer.findMany({
       orderBy: [{ recipient: 'asc' }, { orderDate: 'desc' }, { createdAt: 'desc' }],
+      include: { history: { orderBy: { changedAt: 'asc' } } },
     });
     return rows.map(r => ({
       id: r.id,
       recipient: r.recipient,
+      scopeType: r.scopeType as 'program' | 'district' | null,
       purpose: r.purpose,
       objectCode: r.objectCode,
       fiscalYear: r.fiscalYear,
@@ -41,6 +52,14 @@ export class TransfersService {
       status: r.status as TransferStatus,
       utilized: r.utilized,
       remarks: r.remarks,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+      history: r.history.map(entry => ({
+        changedAt: entry.changedAt.toISOString(),
+        field: entry.field,
+        oldValue: entry.oldValue,
+        newValue: entry.newValue,
+      })),
     }));
   }
 
@@ -58,6 +77,24 @@ export class TransfersService {
         },
       });
       await this.applyBudgetImpact(tx, null, transfer);
+      await tx.transferHistory.create({
+        data: {
+          transferId: transfer.id,
+          field: 'record-created',
+          newValue: JSON.stringify({
+            recipient: transfer.recipient,
+            purpose: transfer.purpose,
+            objectCode: transfer.objectCode,
+            fiscalYear: transfer.fiscalYear,
+            budgetCode: transfer.budgetCode,
+            amount: transfer.amount,
+            orderDate: transfer.orderDate?.toISOString() ?? null,
+            status: transfer.status,
+            utilized: transfer.utilized,
+            remarks: transfer.remarks,
+          }),
+        },
+      });
       return transfer;
     });
   }
@@ -106,8 +143,33 @@ export class TransfersService {
         },
       });
       await this.applyBudgetImpact(tx, previous, transfer);
+      const changedFields = Object.keys(data).filter(field =>
+        !this.valuesEqual(previous[field as keyof typeof previous], transfer[field as keyof typeof transfer]),
+      );
+      if (changedFields.length) {
+        await tx.transferHistory.createMany({
+          data: changedFields.map(field => ({
+            transferId: transfer.id,
+            field,
+            oldValue: this.historyValue(previous[field as keyof typeof previous]),
+            newValue: this.historyValue(transfer[field as keyof typeof transfer]),
+          })),
+        });
+      }
       return transfer;
     });
+  }
+
+  private historyValue(value: unknown): string | null {
+    if (value === null || value === undefined) return null;
+    return value instanceof Date ? value.toISOString() : String(value);
+  }
+
+  private valuesEqual(left: unknown, right: unknown): boolean {
+    if (left instanceof Date && right instanceof Date) {
+      return left.getTime() === right.getTime();
+    }
+    return Object.is(left, right);
   }
 
   async remove(id: string): Promise<Transfer> {
@@ -131,6 +193,9 @@ export class TransfersService {
     }
     if (data.status !== undefined && !['transferred', 'minutes_awaited'].includes(data.status)) {
       throw new BadRequestException(`Unsupported transfer status: ${data.status}`);
+    }
+    if (data.scopeType !== undefined && data.scopeType !== null && !['program', 'district'].includes(data.scopeType)) {
+      throw new BadRequestException('Transfer recipient type must be a program or district.');
     }
     if (data.amount !== undefined && (!Number.isFinite(data.amount) || data.amount < 0)) {
       throw new BadRequestException('Transfer amount must be a non-negative number.');

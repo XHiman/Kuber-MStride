@@ -106,6 +106,12 @@ function readRows(csv: string): BudgetImportRow[] {
 }
 
 async function main(): Promise<void> {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Budget imports are disabled in production. Use the authenticated admin panel instead.');
+  }
+  if (process.env.ALLOW_BUDGET_IMPORT !== 'true') {
+    throw new Error('Set ALLOW_BUDGET_IMPORT=true to explicitly enable a development budget import.');
+  }
   const fileName = process.argv[2];
   if (!fileName) {
     throw new Error('Usage: npm run db:budget:import -- <csv-file>');
@@ -118,7 +124,7 @@ async function main(): Promise<void> {
   const objectHeadsByCode = new Map(objectHeads.map((head) => [head.code, head]));
   for (const row of rows) {
     if (!objectHeadsByCode.has(row.objectCode)) {
-      throw new Error(`Object head ${row.objectCode} does not exist. Run the production seed first.`);
+      throw new Error(`Object head ${row.objectCode} does not exist. Provision it in the development database first.`);
     }
   }
 

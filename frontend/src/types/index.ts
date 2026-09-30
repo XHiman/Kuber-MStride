@@ -19,6 +19,9 @@ export interface Bill {
   budgetCode: string | null;
   objectHead: string | null;
   transferId: string | null;
+  program: string | null;
+  district: string | null;
+  assignedUserId: string | null;
   bucket: string;
   cat: BillCategory;
   status: string;
@@ -53,6 +56,7 @@ export interface BudgetRow {
 export interface Transfer {
   id: string;
   recipient: string;
+  scopeType: 'program' | 'district' | null;
   purpose: string;
   objectCode: string;
   fiscalYear: string;
@@ -62,6 +66,34 @@ export interface Transfer {
   status: TransferStatus;
   utilized: number;
   remarks: string | null;
+  createdAt: string;
+  updatedAt: string;
+  history: TransferHistoryEntry[];
+}
+
+export interface TransferHistoryEntry {
+  changedAt: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+}
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  programs: string[];
+  districts: string[];
+  deviceCount?: number;
+  assignedBillCount?: number;
+}
+
+export interface GlobalSearchResult {
+  id: string;
+  entity: string;
+  tab: 'bills' | 'budget' | 'transfers' | 'dashboard';
+  title: string;
+  subtitle: string;
+  fiscalYear?: string;
 }
 
 export interface District {

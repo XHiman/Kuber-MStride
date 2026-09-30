@@ -11,6 +11,9 @@ export default defineConfig({
       '/budget': { target: 'http://localhost:3001', changeOrigin: true },
       '/transfers': { target: 'http://localhost:3001', changeOrigin: true },
       '/districts': { target: 'http://localhost:3001', changeOrigin: true },
+      '/users': { target: 'http://localhost:3001', changeOrigin: true },
+      '/search': { target: 'http://localhost:3001', changeOrigin: true },
+      '/adminX/api': { target: 'http://localhost:3001', changeOrigin: true },
     },
   },
 });

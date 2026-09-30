@@ -17,9 +17,13 @@ model Bill {
   budgetCode String?
   objectHead String?
   transferId String?
+  program    String?
+  district   String?
+  assignedUserId String?
   budgetHead BudgetHead? @relation(fields: [budgetCode], references: [code])
   objectHeadRef ObjectHead? @relation("BillObjectHead", fields: [objectHead], references: [code])
   transfer Transfer? @relation(fields: [transferId], references: [id])
+  assignedUser User? @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
   bucket    String
   cat       String
   status    String
@@ -75,6 +79,7 @@ model ObjectHead {
 model Transfer {
   id         String    @id @default(cuid())
   recipient  String
+  scopeType  String?
   purpose    String
   objectCode String
   amount     Float
@@ -89,8 +94,49 @@ model Transfer {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   bills      Bill[]
+  history    TransferHistory[]
 
   @@map("transfers")
+}
+
+model User {
+  id        String       @id @default(cuid())
+  name      String
+  programs  String       @default("[]")
+  districts String       @default("[]")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  devices   UserDevice[]
+  bills     Bill[]
+
+  @@map("users")
+}
+
+model UserDevice {
+  id         String   @id @default(cuid())
+  deviceId   String   @unique
+  ipAddress  String?
+  userAgent  String
+  accessEnabled Boolean @default(true)
+  lastSeenAt DateTime @default(now())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("user_devices")
+}
+
+model TransferHistory {
+  id          String   @id @default(cuid())
+  transferId  String
+  changedAt   DateTime @default(now())
+  field       String
+  oldValue    String?
+  newValue    String?
+  transfer    Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  @@index([transferId, changedAt])
+  @@map("transfer_history")
 }
 
 model District {

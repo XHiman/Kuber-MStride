@@ -67,8 +67,8 @@ export class BillsService {
   }
 
   async create(
-  data: Omit<Bill, 'id' | 'createdAt' | 'updatedAt' | 'budgetCode' | 'objectHead' | 'transferId'> &
-    Partial<Pick<Bill, 'budgetCode' | 'objectHead' | 'transferId'>>,
+  data: Omit<Bill, 'id' | 'createdAt' | 'updatedAt' | 'budgetCode' | 'objectHead' | 'transferId' | 'program' | 'district' | 'assignedUserId'> &
+    Partial<Pick<Bill, 'budgetCode' | 'objectHead' | 'transferId' | 'program' | 'district' | 'assignedUserId'>>,
 ): Promise<Bill> {
   const cls = this.classifyBill(data.status, data.bucket);
 
@@ -135,19 +135,43 @@ export class BillsService {
 
     const oldTransfer = this.transferImpact(previous);
     const newTransfer = this.transferImpact(current);
-    if (oldTransfer) {
+    const unchangedTransferImpact = Boolean(
+      oldTransfer &&
+      newTransfer &&
+      oldTransfer.transferId === newTransfer.transferId &&
+      oldTransfer.amount === newTransfer.amount,
+    );
+    if (oldTransfer && !unchangedTransferImpact) {
+      const previousTransfer = await tx.transfer.findUniqueOrThrow({ where: { id: oldTransfer.transferId } });
       const transfer = await tx.transfer.update({
         where: { id: oldTransfer.transferId },
         data: { utilized: { decrement: oldTransfer.amount } },
+      });
+      await tx.transferHistory.create({
+        data: {
+          transferId: transfer.id,
+          field: 'utilized',
+          oldValue: String(previousTransfer.utilized),
+          newValue: String(transfer.utilized),
+        },
       });
       if (transfer.utilized < 0) {
         throw new BadRequestException('Linked utilization is below the amount being removed from this transfer.');
       }
     }
-    if (newTransfer) {
+    if (newTransfer && !unchangedTransferImpact) {
+      const previousTransfer = await tx.transfer.findUniqueOrThrow({ where: { id: newTransfer.transferId } });
       const transfer = await tx.transfer.update({
         where: { id: newTransfer.transferId },
         data: { utilized: { increment: newTransfer.amount } },
+      });
+      await tx.transferHistory.create({
+        data: {
+          transferId: transfer.id,
+          field: 'utilized',
+          oldValue: String(previousTransfer.utilized),
+          newValue: String(transfer.utilized),
+        },
       });
       if (transfer.utilized > transfer.amount) {
         throw new BadRequestException('Cleared bill exceeds the remaining amount on its linked transfer.');

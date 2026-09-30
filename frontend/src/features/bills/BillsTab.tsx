@@ -3,12 +3,14 @@ import { apiClient } from '../../lib/api';
 import type { Bill } from '../../types';
 import { fmtIN, fmtShort, pct } from '../bills/utils';
 import { BillCategory } from '../../types';
-import { downloadCSV } from '../../lib/export';
 import { useAppSettings } from '../../lib/appSettings';
+import ExportActions from '../../components/ExportActions';
+import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
 
-export default function BillsTab() {
+export default function BillsTab({ globalQuery = '' }: { globalQuery?: string }) {
   const { t } = useAppSettings();
   const [bills, setBills] = useState<Bill[]>([]);
+  const [users, setUsers] = useState<import('../../types').UserProfile[]>([]);
   const [dashboard, setDashboard] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [vendorFilter, setVendorFilter] = useState('');
@@ -22,9 +24,10 @@ export default function BillsTab() {
   useEffect(() => { load(); }, []);
 
   async function load() {
-    const [billsData, dash] = await Promise.all([apiClient.bills.list(), apiClient.bills.dashboard()]);
+    const [billsData, dash, people] = await Promise.all([apiClient.bills.list(), apiClient.bills.dashboard(), apiClient.users.list()]);
     setBills(billsData);
     setDashboard(dash);
+    setUsers(people);
   }
 
   const filtered = useMemo(() => {
@@ -32,9 +35,13 @@ export default function BillsTab() {
     if (vendorFilter) rows = rows.filter(b => b.vendor === vendorFilter);
     if (stageFilter) rows = rows.filter(b => b.bucket === stageFilter);
     if (catFilter) rows = rows.filter(b => b.cat === catFilter);
-    if (search) {
-      const q = search.toLowerCase();
-      rows = rows.filter(b => `${b.vendor} ${b.invoice} ${b.status}`.toLowerCase().includes(q));
+    if (search || globalQuery) {
+      const q = `${search} ${globalQuery}`.toLowerCase().trim().split(/\s+/).filter(Boolean);
+      rows = rows.filter(b => {
+        const assignedName = users.find(user => user.id === b.assignedUserId)?.name || '';
+        const haystack = `${b.vendor} ${b.invoice} ${b.status} ${b.cat} ${b.bucket} ${b.attribute || ''} ${b.note || ''} ${b.budgetCode || ''} ${b.objectHead || ''} ${b.program || ''} ${b.district || ''} ${assignedName} ${b.amount} ${b.date || ''}`.toLowerCase();
+        return q.every(term => haystack.includes(term));
+      });
     }
     rows.sort((a, c) => {
       let av: any = a[sortBy as keyof Bill] ?? '';
@@ -44,7 +51,7 @@ export default function BillsTab() {
       return av < cv ? -1 * (sortDir === 'asc' ? 1 : -1) : av > cv ? 1 * (sortDir === 'asc' ? 1 : -1) : 0;
     });
     return rows;
-  }, [bills, search, vendorFilter, stageFilter, catFilter, sortBy, sortDir]);
+  }, [bills, users, search, globalQuery, vendorFilter, stageFilter, catFilter, sortBy, sortDir]);
 
   const vendors = useMemo(() => {
     const set = new Set(bills.map(b => b.vendor));
@@ -74,8 +81,8 @@ export default function BillsTab() {
     }
   }
 
-  function handleExport() {
-    const rows = filtered.map(b => ({
+  function getExportRows() {
+    return filtered.map(b => ({
       '#': b.sr ?? '',
       Vendor: b.vendor,
       Invoice: b.invoice,
@@ -85,10 +92,12 @@ export default function BillsTab() {
       Status: b.cat,
       'Cleared FY': b.clearedFY || '',
       Attribute: b.attribute || '',
+      Program: b.program || '',
+      District: b.district || '',
+      Assigned_to: users.find(user => user.id === b.assignedUserId)?.name || '',
       Days_Pending: b.days ?? '',
       Note: b.note || '',
     }));
-    downloadCSV(rows, 'bills');
   }
 
   return (
@@ -129,13 +138,14 @@ export default function BillsTab() {
           <h2>{t('Full bill register')}</h2>
           <div className="panel-actions">
             <span className="note">{filtered.length} {t('of')} {bills.length} {t('bills')}</span>
-            <button className="btn export-btn" onClick={handleExport}>↓ {t('Export CSV')}</button>
+            <ExportActions getRows={getExportRows} filename="bills" />
             <button className="btn primary" onClick={() => { setEditingBill(null); setShowModal(true); }}>+ {t('Add bill')}</button>
           </div>
         </div>
         <Filters vendors={vendors} search={search} setSearch={setSearch} vendorFilter={vendorFilter} setVendorFilter={setVendorFilter} stageFilter={stageFilter} setStageFilter={setStageFilter} catFilter={catFilter} setCatFilter={setCatFilter} />
         <Table
           bills={filtered}
+          users={users}
           emptyMessage={bills.length === 0 ? t('No bills have been added yet. Use “Add bill” to start the register.') : t('No bills match the selected search or filters.')}
           sortBy={sortBy}
           sortDir={sortDir}
@@ -378,13 +388,14 @@ type BillSortKey = 'date' | 'amount';
 
  type TableProps = {
     bills: Bill[];
+    users: import('../../types').UserProfile[];
     sortBy: BillSortKey;
     sortDir: 'asc' | 'desc';
     onSort: (key: BillSortKey) => void;
     onEdit: (bill: Bill) => void;
   };
 
-function Table({ bills, emptyMessage, sortBy, sortDir, onSort, onEdit }: TableProps & { emptyMessage: string }) {
+function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit }: TableProps & { emptyMessage: string }) {
   const { t } = useAppSettings();
   return (
     <div className="table-scroll">
@@ -399,7 +410,7 @@ function Table({ bills, emptyMessage, sortBy, sortDir, onSort, onEdit }: TablePr
 <th className="num sortable" onClick={() => onSort('amount')}>
   {t('Amount')} {sortBy === 'amount' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
 </th>
-            <th>{t('Stage')}</th><th>{t('Cleared FY')}</th><th>{t('Payment attribute')}</th><th>{t('Status / tracker remark')}</th><th></th>
+            <th>{t('Stage')}</th><th>{t('Cleared FY')}</th><th>{t('Program')}</th><th>{t('District')}</th><th>{t('Assigned person')}</th><th>{t('Payment attribute')}</th><th>{t('Status / tracker remark')}</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -412,13 +423,16 @@ function Table({ bills, emptyMessage, sortBy, sortDir, onSort, onEdit }: TablePr
               <td className="num amt-cell mono">{fmtIN(b.amount)}</td>
               <td><span className={`chip ${b.cat} ${stageClass(b.bucket)}`}><span className="dot" />{b.bucket}</span></td>
               <td className="mono">{b.clearedFY || '—'}</td>
+              <td>{b.program || '—'}</td>
+              <td>{b.district || '—'}</td>
+              <td>{users.find(user => user.id === b.assignedUserId)?.name || '—'}</td>
               <td className="status-cell">{b.attribute || '—'}</td>
               <td className="status-cell">{b.status}</td>
               <td className="row-actions"><button className="btn-icon" onClick={() => onEdit(b)} title={t('Edit')}>✎</button></td>
             </tr>
           ))}
           {bills.length === 0 && (
-            <tr><td className="empty-table" colSpan={10}>{emptyMessage}</td></tr>
+            <tr><td className="empty-table" colSpan={13}>{emptyMessage}</td></tr>
           )}
         </tbody>
       </table>
@@ -429,8 +443,13 @@ function Table({ bills, emptyMessage, sortBy, sortDir, onSort, onEdit }: TablePr
 function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) => void; onClose: () => void }) {
   const { t } = useAppSettings();
   const [transfers, setTransfers] = useState<any[]>([]);
+  const [users, setUsers] = useState<import('../../types').UserProfile[]>([]);
+  const [districts, setDistricts] = useState<import('../../types').District[]>([]);
+  const [entityType, setEntityType] = useState<ProgramDistrictType>(bill?.district ? 'district' : 'program');
   useEffect(() => {
     apiClient.transfers.records().then(setTransfers);
+    apiClient.users.list().then(setUsers);
+    apiClient.districts.records().then(setDistricts);
   }, []);
   const [form, setForm] = useState({
   vendor: bill?.vendor || '',
@@ -442,6 +461,9 @@ function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) =
   budgetCode: bill?.budgetCode || '',
   objectHead: bill?.objectHead || '',
   transferId: bill?.transferId || '',
+  program: bill?.program || '',
+  district: bill?.district || '',
+  assignedUserId: bill?.assignedUserId || '',
   bucket: bill?.bucket || 'Invoice Raised',
 });
 
@@ -449,7 +471,27 @@ function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) =
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-card">
         <h3>{t(bill ? 'Edit bill' : 'Add bill')}</h3>
-        <div className="field"><label>{t('Vendor / DSU')}</label><input value={form.vendor} onChange={e => setForm({ ...form, vendor: e.target.value })} /></div>
+        <ProgramDistrictField
+          label="Vendor / DSU — Program or District"
+          type={entityType}
+          value={form.vendor}
+          programs={[...users.flatMap(user => user.programs), ...transfers.filter(transfer => transfer.scopeType === 'program').map(transfer => transfer.recipient), ...(form.program ? [form.program] : [])]}
+          districts={[...districts.map(district => district.district), ...users.flatMap(user => user.districts), ...transfers.filter(transfer => transfer.scopeType === 'district').map(transfer => transfer.recipient), ...(form.district ? [form.district] : [])]}
+          onTypeChange={type => {
+            setEntityType(type);
+            setForm(previous => ({
+              ...previous,
+              program: type === 'program' ? previous.vendor : '',
+              district: type === 'district' ? previous.vendor : '',
+            }));
+          }}
+          onValueChange={value => setForm(previous => ({
+            ...previous,
+            vendor: value,
+            program: entityType === 'program' ? value : '',
+            district: entityType === 'district' ? value : '',
+          }))}
+        />
         <div className="field-row">
           <div className="field"><label>{t('Invoice no.')}</label><input value={form.invoice} onChange={e => setForm({ ...form, invoice: e.target.value })} /></div>
           <div className="field"><label>{t('Invoice date')}</label><input
@@ -511,6 +553,7 @@ function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) =
 </div>
         <div className="field"><label>{t('Amount (₹)')}</label><input type="number" min="0" step="1" value={form.amount} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} /></div>
         <div className="field"><label>{t('Payment attribute')}</label><input value={form.attribute} onChange={e => setForm({ ...form, attribute: e.target.value })} /></div>
+        <div className="field"><label>{t('Assigned person')}</label><select value={form.assignedUserId} onChange={e => setForm({ ...form, assignedUserId: e.target.value })}><option value="">{t('Unassigned')}</option>{users.map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select></div>
         <div className="field"><label>{t('Linked transfer (used when cleared)')}</label><select value={form.transferId} onChange={e => setForm({ ...form, transferId: e.target.value })}><option value="">{t('No linked transfer')}</option>{transfers.map(t => <option key={t.id} value={t.id}>{t.recipient} — {t.purpose} ({fmtIN(t.amount)})</option>)}</select></div>
         <div className="field"><label>{t('Current status')}</label><textarea value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} /></div>
         <div className="modal-actions">
@@ -526,6 +569,9 @@ function BillModal({ bill, onSave, onClose }: { bill: any; onSave: (data: any) =
                 budgetCode: form.budgetCode || null,
                 objectHead: form.objectHead || null,
                 transferId: form.transferId || null,
+                program: form.program.trim() || null,
+                district: form.district.trim() || null,
+                assignedUserId: form.assignedUserId || null,
               });
             }}
           >

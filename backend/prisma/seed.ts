@@ -198,50 +198,10 @@ const DISTRICTS = [
 
 async function main() {
   if (process.env.NODE_ENV === 'production' || process.argv.includes('--production')) {
-    await prisma.$transaction(async (tx) => {
-      for (const head of BUDGET_HEADS) {
-        await tx.budgetHead.upsert({
-          where: { code: head.code },
-          update: {},
-          create: head,
-        });
-      }
-
-      for (const head of OBJECT_HEADS) {
-        await tx.objectHead.upsert({
-          where: { code: head.code },
-          update: {},
-          create: head,
-        });
-      }
-
-      for (const fiscalYear of FISCAL_YEARS) {
-        for (const head of OBJECT_HEADS) {
-          const source = fiscalYear === 'FY 2026-27'
-            ? BUDGET.find((budget) => budget.code === head.code)
-            : undefined;
-          await tx.budget.upsert({
-            where: { fiscalYear_code: { fiscalYear, code: head.code } },
-            update: {},
-            create: {
-              id: `${fiscalYear}:${head.code}`,
-              fiscalYear,
-              code: head.code,
-              name: source?.name || head.name,
-              nameMr: source?.nameMr || head.nameMr,
-              prov215: source?.prov215 || 0,
-              exp215: 0,
-              prov224: source?.prov224 || 0,
-              exp224: 0,
-              prov233: source?.prov233 || 0,
-              exp233: 0,
-            },
-          });
-        }
-      }
-    });
-    console.log('Ensured production lookup data; existing records were preserved.');
-    return;
+    throw new Error('Seeding is disabled in production.');
+  }
+  if (process.env.ALLOW_DESTRUCTIVE_DEV_SEED !== 'true') {
+    throw new Error('Set ALLOW_DESTRUCTIVE_DEV_SEED=true to explicitly enable the destructive development seed.');
   }
 
   console.log('🌱 Seeding database...');

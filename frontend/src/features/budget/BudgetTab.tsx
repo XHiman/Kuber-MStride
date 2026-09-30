@@ -2,12 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../../lib/api';
 import type { BudgetRow } from '../../types';
 import { fmtIN, fmtShort, pct } from '../bills/utils';
-import { downloadCSV } from '../../lib/export';
 import { useAppSettings } from '../../lib/appSettings';
+import ExportActions from '../../components/ExportActions';
 
 const BUDGET_CODE_ORDER = ['01', '06', '10', '11', '13', '14', '16', '17', '21', '24', '26', '27', '28', '31'];
 
-export default function BudgetTab() {
+export default function BudgetTab({ globalQuery = '', initialFiscalYear }: { globalQuery?: string; initialFiscalYear?: string }) {
   const { t } = useAppSettings();
   const [budget, setBudget] = useState<any>(null);
   const [rows, setRows] = useState<BudgetRow[]>([]);
@@ -16,6 +16,9 @@ export default function BudgetTab() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { load(); }, [fiscalYear]);
+  useEffect(() => {
+    if (initialFiscalYear && initialFiscalYear !== fiscalYear) setFiscalYear(initialFiscalYear);
+  }, [initialFiscalYear]);
 
   useEffect(() => {
     if (pendingEdits.size > 0) {
@@ -38,10 +41,12 @@ export default function BudgetTab() {
     ...row,
     ...pendingEdits.get(row.code),
   })), [rows, pendingEdits]);
-  const rowsByCode = useMemo(
-    () => new Map(effectiveRows.map(row => [row.code, row])),
-    [effectiveRows],
-  );
+  const searchTerms = globalQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const visibleRows = effectiveRows.filter(row => {
+    const searchable = `${row.code} ${row.name} ${row.nameMr} ${row.fiscalYear} ${row.prov215} ${row.exp215} ${row.prov224} ${row.exp224} ${row.prov233} ${row.exp233}`.toLowerCase();
+    return searchTerms.every(term => searchable.includes(term));
+  });
+  const rowsByCode = useMemo(() => new Map(visibleRows.map(row => [row.code, row])), [visibleRows]);
 
   if (!budget) return <div className="panel"><p>{t('Loading budget data…')}</p></div>;
 
@@ -50,8 +55,9 @@ export default function BudgetTab() {
   );
   const headLabel = (code: string, fallback: string) => budgetHeads.get(code) || fallback;
 
-  function handleExport() {
-    const exportRows = effectiveRows.map((r: BudgetRow) => ({
+  function getExportRows() {
+    return visibleRows.map((r: BudgetRow) => ({
+      Fiscal_Year: r.fiscalYear,
       Code: r.code,
       'Object head': r.name,
       '215_Provision': r.prov215,
@@ -65,8 +71,8 @@ export default function BudgetTab() {
       '233_Balance': (r.prov233 || 0) - (r.exp233 || 0),
       'Total_Provision': (r.prov215 || 0) + (r.prov224 || 0) + (r.prov233 || 0),
       'Total_Expenditure': (r.exp215 || 0) + (r.exp224 || 0) + (r.exp233 || 0),
+      'Total_Balance': (r.prov215 || 0) + (r.prov224 || 0) + (r.prov233 || 0) - (r.exp215 || 0) - (r.exp224 || 0) - (r.exp233 || 0),
     }));
-    downloadCSV(exportRows, `budget-${fiscalYear}`);
   }
 
   const totals = effectiveRows.reduce((acc, r) => ({
@@ -123,8 +129,17 @@ function handleUndo() {
 function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
   const pending = pendingEdits.get(row.code)?.[field];
   const displayValue = pending ?? row[field] ?? 0;
+  const labels: Record<EditableBudgetField, string> = {
+    prov215: 'A215 Provision',
+    exp215: 'A215 Expenditure',
+    prov224: 'A224 Provision',
+    exp224: 'A224 Expenditure',
+    prov233: 'A233 Provision',
+    exp233: 'A233 Expenditure',
+  };
   return (
     <td
+      data-label={labels[field]}
       className={`num mono${startsGroup ? ' budget-group-start' : ''} ${fiscalYear === 'FY Total' ? '' : 'edit-cell'}`}
       contentEditable={fiscalYear !== 'FY Total'}
       suppressContentEditableWarning
@@ -194,11 +209,11 @@ function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
                 </button>
               </>
             )}
-            <button className="btn export-btn" onClick={handleExport}>↓ {t('Export CSV')}</button>
+            <ExportActions getRows={getExportRows} filename={`budget-${fiscalYear}`} />
           </div>
         </div>
         <div className="table-scroll">
-          <table>
+          <table className="budget-responsive-table">
             <thead>
               <tr>
                 <th>{t('Code')}</th><th>{t('Object head')}</th>
@@ -220,31 +235,31 @@ function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
                 const totals = (totProv || 0) - (totExp || 0);
                 return (
                   <tr key={r.code}>
-                    <td className="mono">{r.code}</td>
-                    <td>{r.objectHead.name}<br /><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{r.objectHead.nameMr}</span></td>
-                    {cell(r, 'prov215', true)}{cell(r, 'exp215')}<td className="num mono">{fmtIN(bal215)}</td>
-                    {cell(r, 'prov224', true)}{cell(r, 'exp224')}<td className="num mono">{fmtIN(bal224)}</td>
-                    {cell(r, 'prov233', true)}{cell(r, 'exp233')}<td className="num mono">{fmtIN(bal233)}</td>
-                    <td className="num amt-cell mono budget-group-start">{fmtIN(totProv)}</td>
-                    <td className="num amt-cell mono">{fmtIN(totExp)}</td>
-                    <td className="num amt-cell mono">{fmtIN(totals)}</td>
+                    <td className="mono" data-label={t('Code')}>{r.code}</td>
+                    <td data-label={t('Object head')}>{r.objectHead.name}<br /><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{r.objectHead.nameMr}</span></td>
+                    {cell(r, 'prov215', true)}{cell(r, 'exp215')}<td className="num mono" data-label={t('A215 Balance')}>{fmtIN(bal215)}</td>
+                    {cell(r, 'prov224', true)}{cell(r, 'exp224')}<td className="num mono" data-label={t('A224 Balance')}>{fmtIN(bal224)}</td>
+                    {cell(r, 'prov233', true)}{cell(r, 'exp233')}<td className="num mono" data-label={t('A233 Balance')}>{fmtIN(bal233)}</td>
+                    <td className="num amt-cell mono budget-group-start" data-label={t('Total provision')}>{fmtIN(totProv)}</td>
+                    <td className="num amt-cell mono" data-label={t('Total expenditure')}>{fmtIN(totExp)}</td>
+                    <td className="num amt-cell mono" data-label={t('Total balance')}>{fmtIN(totals)}</td>
                   </tr>
                 );
               })}
-              <tr className="tot-row">
-                <td></td><td>{t('Total')}</td>
-                <td className="num mono budget-group-start">{fmtIN(totals.prov215)}</td>
-                <td className="num mono">{fmtIN(totals.exp215)}</td>
-                <td className="num mono">{fmtIN(totals.prov215 - totals.exp215)}</td>
-                <td className="num mono budget-group-start">{fmtIN(totals.prov224)}</td>
-                <td className="num mono">{fmtIN(totals.exp224)}</td>
-                <td className="num mono">{fmtIN(totals.prov224 - totals.exp224)}</td>
-                <td className="num mono budget-group-start">{fmtIN(totals.prov233)}</td>
-                <td className="num mono">{fmtIN(totals.exp233)}</td>
-                <td className="num mono">{fmtIN(totals.prov233 - totals.exp233)}</td>
-                <td className="num mono budget-group-start">{fmtIN(grandProv)}</td>
-                <td className="num mono">{fmtIN(grandExp)}</td>
-                <td className="num mono">{fmtIN(grandBal)}</td>
+              <tr className="tot-row budget-total-row">
+                <td data-label={t('Code')}></td><td data-label={t('Object head')}>{t('Total')}</td>
+                <td className="num mono budget-group-start" data-label={t('A215 Provision')}>{fmtIN(totals.prov215)}</td>
+                <td className="num mono" data-label={t('A215 Expenditure')}>{fmtIN(totals.exp215)}</td>
+                <td className="num mono" data-label={t('A215 Balance')}>{fmtIN(totals.prov215 - totals.exp215)}</td>
+                <td className="num mono budget-group-start" data-label={t('A224 Provision')}>{fmtIN(totals.prov224)}</td>
+                <td className="num mono" data-label={t('A224 Expenditure')}>{fmtIN(totals.exp224)}</td>
+                <td className="num mono" data-label={t('A224 Balance')}>{fmtIN(totals.prov224 - totals.exp224)}</td>
+                <td className="num mono budget-group-start" data-label={t('A233 Provision')}>{fmtIN(totals.prov233)}</td>
+                <td className="num mono" data-label={t('A233 Expenditure')}>{fmtIN(totals.exp233)}</td>
+                <td className="num mono" data-label={t('A233 Balance')}>{fmtIN(totals.prov233 - totals.exp233)}</td>
+                <td className="num mono budget-group-start" data-label={t('Total provision')}>{fmtIN(grandProv)}</td>
+                <td className="num mono" data-label={t('Total expenditure')}>{fmtIN(grandExp)}</td>
+                <td className="num mono" data-label={t('Total balance')}>{fmtIN(grandBal)}</td>
               </tr>
             </tbody>
           </table>

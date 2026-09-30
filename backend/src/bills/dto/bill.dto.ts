@@ -56,6 +56,18 @@ export class CreateBillDto {
   @IsString()
   @IsOptional()
   transferId?: string | null;
+
+  @IsString()
+  @IsOptional()
+  program?: string | null;
+
+  @IsString()
+  @IsOptional()
+  district?: string | null;
+
+  @IsString()
+  @IsOptional()
+  assignedUserId?: string | null;
 }
 
 export class UpdateBillDto {
@@ -102,4 +114,16 @@ export class UpdateBillDto {
   @IsString()
   @IsOptional()
   transferId?: string | null;
+
+  @IsString()
+  @IsOptional()
+  program?: string | null;
+
+  @IsString()
+  @IsOptional()
+  district?: string | null;
+
+  @IsString()
+  @IsOptional()
+  assignedUserId?: string | null;
 }

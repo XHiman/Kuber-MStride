@@ -31,9 +31,14 @@ The interface supports **light and dark appearance** and **English and Marathi U
 
 | Workspace | What it helps you do |
 | --- | --- |
-| **Bills pipeline** | Track six clearance checkpoints, search and filter the register, review aging and exceptions, and export bills to CSV. |
-| **Budget by FY** | Review provisions, expenditure and balance by object code across FY 2024-25–2029-30, or use the read-only **FY Total** view. |
-| **Fund transfers** | Group transfers by recipient, record release and utilization, and track District Incentive Fund entries. |
+| **Bills pipeline** | Track six clearance checkpoints, search and filter the register, select or enter a Vendor/DSU as a Program or District, assign bills to a person, review aging and exceptions, and copy or download the register. |
+| **Budget by FY** | Review provisions, expenditure and balance by object code across FY 2024-25–2029-30, or use the read-only **FY Total** view. Search globally and use the compact mobile budget cards. |
+| **Fund transfers** | Select or enter recipients as Programs or Districts, reuse their most frequent purpose/object code, and audit transfer changes and utilization history. |
+| **Dashboard** | Name a browser device and see personal bill and district work. User/device records and program/district scopes are maintained on the backend, not exposed as a user-facing tab. |
+
+The global search bar searches bills, budgets, transfers, districts and people from any tab. Exports first copy the full CSV-formatted table to the clipboard; a CSV download action appears after a successful copy.
+
+Device profiles use a persistent browser identifier and record the request IP address and user-agent for recognition. The name prompt can be dismissed. A developer can correct `user_devices.ipAddress`, remap a device through `user_devices.userId`, and maintain user program/district scopes in the backend database; there is no separate administrator login in this application.
 
 ## Built with
 
@@ -56,11 +61,10 @@ From the repository root:
 npm install
 npm run db:generate
 npm run db:migrate
-npm run db:seed
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The frontend runs on port `3000`; the NestJS API runs on port `3001`.
+Open [http://localhost:5173](http://localhost:5173). The Vite frontend proxies API requests to the NestJS API on port `3001`. The database is not seeded automatically.
 
 To create a production bundle:
 
@@ -70,20 +74,12 @@ npm run build
 
 ## Database & deployment
 
-The Prisma SQLite database is `backend/prisma/dev.db`. Use migrations to evolve its schema while retaining records.
+The Prisma SQLite database is `backend/prisma/dev.db`. This repository does not seed, reset, or import records during builds or deployments. Database content is managed through the authenticated admin panel; schema-only updates are applied with Prisma migrations.
 
-> **Destructive command:** `npm run db:reset` drops and recreates the local database, then seeds it. Do not use it when you need to preserve existing records.
-
-The regular development seed loads the reference/sample data. The production-safe seed command does **not** replace bills, transfers or district records; it ensures lookup data and fiscal-year budget rows exist while preserving budget values:
+For a hosted deployment, configure the pre-deploy step to apply pending schema migrations only:
 
 ```bash
-npm run db:seed:production
-```
-
-For a hosted deployment, configure the service's pre-deploy step to apply pending migrations and run the production-safe seed:
-
-```bash
-npm run db:migrate:deploy && npm run db:seed:production
+npm run db:migrate:deploy
 ```
 
 Keep the hosting build command as:
@@ -92,22 +88,11 @@ Keep the hosting build command as:
 npm install && npm run build
 ```
 
-Provision data separately from schema deployment. FY 2026-27 provisions are restored from the source workbook; other fiscal years should be loaded from approved figures rather than inferred.
+Legacy seed/import files are disabled in production and their package scripts have been removed. The development seed is destructive and requires explicit `ALLOW_DESTRUCTIVE_DEV_SEED=true`; a development budget import requires `ALLOW_BUDGET_IMPORT=true`. Do not set these variables in production.
 
-### Import budget provisions
+### Admin panel
 
-Prepare a CSV with the following header and one row per fiscal year and object code. Amounts are in rupees for heads A215, A224 and A233. The importer updates provisions; expenditure remains managed by transfers and eligible bill clearances.
-
-```csv
-fiscalYear,objectCode,prov215,prov224,prov233
-FY 2026-27,01,10800000,4620000,50000000
-```
-
-Import it with:
-
-```bash
-npm run db:budget:import -- backend/prisma/budget.csv
-```
+Open `/adminX` to sign in and manage bills, budgets, budget heads, object heads, transfers, districts, users and browser devices. For local development, copy `backend/.env.example` to `backend/.env` and replace both placeholder values with a new password and a random `ADMIN_SESSION_SECRET` of at least 32 characters. The backend loads this file on startup; it is git-ignored. In production, configure both values as server-only deployment secrets instead. Never place credentials in frontend variables or source control. Rotate any password previously shared in chat before deployment. New browser devices start disabled until an admin assigns a user and grants access. Existing device access is preserved by the additive access-control migration.
 
 ## Repository map
 
@@ -118,6 +103,8 @@ backend/
   src/budget/             Fiscal-year budget and totals
   src/transfers/          Transfer records and budget accounting
   src/districts/          District Incentive Fund records
+  src/users/               Device profiles and personal dashboard scopes
+  src/search/              Cross-entity global search
   src/common/             Shared fiscal-year and bill utilities
 frontend/
   src/App.tsx             App shell, workspace navigation and display controls
@@ -149,6 +136,12 @@ The frontend communicates with the NestJS API. Common routes include:
 | `GET`, `POST` | `/transfers` | Transfer summary or create a transfer |
 | `GET` | `/transfers/records` | List transfer records |
 | `PUT`, `DELETE` | `/transfers/:id` | Update or remove a transfer |
+| `GET` | `/search?q=…` | Search bills, budgets, transfers, districts and users |
+| `GET` | `/users` | List named users |
+| `POST` | `/users/device` | Record a browser device, request IP and user-agent |
+| `POST` | `/users/claim` | Assign a name to the current browser device |
+| `GET` | `/users/dashboard/:id` | Read the selected user's scoped bills and district records |
+| `PUT` | `/users/:id` | Update a user's program and district scope |
 | `GET`, `POST` | `/districts` | District summary or create a district record |
 | `GET` | `/districts/records` | List district records |
 | `PUT` | `/districts/:id` | Update a district record |

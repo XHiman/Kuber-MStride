@@ -2,14 +2,18 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import BillsTab from './features/bills/BillsTab';
 import BudgetTab from './features/budget/BudgetTab';
 import TransfersTab from './features/transfers/TransfersTab';
+import DashboardTab from './features/dashboard/DashboardTab';
 import { AppSettingsContext, translate, type Language, type Theme } from './lib/appSettings';
+import { apiClient } from './lib/api';
+import type { GlobalSearchResult, UserProfile } from './types';
 
-type Tab = 'bills' | 'budget' | 'transfers';
+type Tab = 'bills' | 'budget' | 'transfers' | 'dashboard';
 
 const tabs: { id: Tab; label: string; detail: string }[] = [
   { id: 'bills', label: 'Bills pipeline', detail: 'Clearance, exceptions & register' },
   { id: 'budget', label: 'Budget by FY', detail: 'Provisions, expenditure & balance' },
   { id: 'transfers', label: 'Fund transfers', detail: 'Recipients, utilization & districts' },
+  { id: 'dashboard', label: 'Dashboard', detail: 'Your assigned work & scope' },
 ];
 
 export default function App() {
@@ -21,6 +25,19 @@ export default function App() {
       : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem('mitra-language') === 'mr' ? 'mr' : 'en');
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [deviceAccessEnabled, setDeviceAccessEnabled] = useState(false);
+  const [deviceId, setDeviceId] = useState('');
+  const [identityChecked, setIdentityChecked] = useState(false);
+  const [identityName, setIdentityName] = useState('');
+  const [identityError, setIdentityError] = useState('');
+  const [identityDismissed, setIdentityDismissed] = useState(false);
+  const [globalQuery, setGlobalQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [budgetFiscalYear, setBudgetFiscalYear] = useState('FY 2026-27');
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const t = (text: string) => translate(text, language);
 
@@ -34,6 +51,41 @@ export default function App() {
     localStorage.setItem('mitra-language', language);
   }, [language]);
 
+  useEffect(() => {
+    let id = localStorage.getItem('mitra-device-id');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('mitra-device-id', id);
+    }
+    setDeviceId(id);
+    setIdentityDismissed(sessionStorage.getItem(`mitra-profile-dismissed:${id}`) === 'true');
+    apiClient.users.registerDevice(id, navigator.userAgent)
+      .then(({ user, accessEnabled }) => {
+        setCurrentUser(user);
+        setDeviceAccessEnabled(accessEnabled);
+      })
+      .catch(error => setIdentityError(error instanceof Error ? error.message : t('Could not register this device.')))
+      .finally(() => setIdentityChecked(true));
+  }, []);
+
+  useEffect(() => {
+    const query = globalQuery.trim();
+    if (query.length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      setSearchError('');
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setSearchLoading(true);
+      apiClient.search(query)
+        .then(results => { setSearchResults(results); setSearchError(''); })
+        .catch(error => setSearchError(error instanceof Error ? error.message : t('Search failed.')))
+        .finally(() => setSearchLoading(false));
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [globalQuery]);
+
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex = index;
     if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
@@ -45,6 +97,25 @@ export default function App() {
     event.preventDefault();
     setActiveTab(tabs[nextIndex].id);
     tabRefs.current[nextIndex]?.focus();
+  }
+
+  async function saveDeviceName() {
+    if (!deviceId || !identityName.trim()) return;
+    try {
+      const user = await apiClient.users.claimDevice(deviceId, identityName);
+      setCurrentUser(user);
+      setIdentityName('');
+      setIdentityError('');
+    } catch (error) {
+      setIdentityError(error instanceof Error ? error.message : t('Could not save this user name.'));
+    }
+  }
+
+  function openSearchResult(result: GlobalSearchResult) {
+    setGlobalQuery(globalQuery.trim());
+    setActiveTab(result.tab);
+    if (result.fiscalYear) setBudgetFiscalYear(result.fiscalYear);
+    setSearchOpen(false);
   }
 
   return (
@@ -88,6 +159,45 @@ export default function App() {
         </div>
       </header>
 
+      <div className="global-search">
+        <label htmlFor="global-search-input">{t('Search all records')}</label>
+        <input
+          id="global-search-input"
+          type="search"
+          value={globalQuery}
+          onChange={event => setGlobalQuery(event.target.value)}
+          onFocus={() => setSearchOpen(true)}
+          onKeyDown={event => {
+            if (event.key === 'Escape') setSearchOpen(false);
+            if (event.key === 'Enter' && searchResults[0]) openSearchResult(searchResults[0]);
+          }}
+          placeholder={t('Search bills, budgets, transfers, districts, people…')}
+          aria-expanded={searchOpen}
+          aria-controls="global-search-results"
+        />
+        {searchOpen && globalQuery.trim().length >= 2 && (
+          <div className="global-search-results" id="global-search-results" role="listbox">
+            {searchLoading && <div className="search-message">{t('Searching…')}</div>}
+            {searchError && <div className="search-message form-error" role="alert">{searchError}</div>}
+            {!searchLoading && !searchError && searchResults.map((result, index) => (
+              <button
+                key={`${result.entity}-${result.id}`}
+                className="global-search-result"
+                type="button"
+                role="option"
+                aria-selected={index === 0}
+                onClick={() => openSearchResult(result)}
+              >
+                <span className="search-result-type">{t(result.entity)}</span>
+                <span className="search-result-copy"><strong>{result.title}</strong><small>{result.subtitle}</small></span>
+                <span aria-hidden="true">↗</span>
+              </button>
+            ))}
+            {!searchLoading && !searchError && !searchResults.length && <div className="search-message">{t('No matching records.')}</div>}
+          </div>
+        )}
+      </div>
+
       <nav className="tabs" role="tablist" aria-label={t('Financial workspaces')}>
         {tabs.map((tab, index) => (
           <button
@@ -123,9 +233,21 @@ export default function App() {
             tabIndex={0}
             hidden={activeTab !== tab.id}
           >
-            {tab.id === 'bills' && <BillsTab />}
-            {tab.id === 'budget' && <BudgetTab />}
-            {tab.id === 'transfers' && <TransfersTab />}
+            {!identityChecked ? <p className="panel">{t('Checking this device…')}</p> : !deviceAccessEnabled ? (
+              <section className="panel access-pending">
+                <h2>{t(currentUser ? 'Access pending approval' : 'Name this device to request access')}</h2>
+                <p>{t(currentUser
+                  ? 'This browser has been registered. An administrator must grant access to this device before it can read or change tracker data.'
+                  : 'Name this browser first. An administrator must then assign a user and grant access before tracker data is available.')}</p>
+              </section>
+            ) : (
+              <>
+                {tab.id === 'bills' && <BillsTab globalQuery={globalQuery} />}
+                {tab.id === 'budget' && <BudgetTab globalQuery={globalQuery} initialFiscalYear={budgetFiscalYear} />}
+                {tab.id === 'transfers' && <TransfersTab globalQuery={globalQuery} />}
+                {tab.id === 'dashboard' && <DashboardTab user={currentUser} />}
+              </>
+            )}
           </div>
         ))}
       </main>
@@ -139,6 +261,26 @@ export default function App() {
         </details>
         <span className="footer-credit">{t('Made by XHiman')}</span>
       </footer>
+      {identityChecked && !currentUser && !identityDismissed && (
+        <section className="identity-prompt" aria-label={t('Name this device')}>
+          <button
+            className="identity-dismiss"
+            type="button"
+            aria-label={t('Dismiss')}
+            onClick={() => {
+              if (deviceId) sessionStorage.setItem(`mitra-profile-dismissed:${deviceId}`, 'true');
+              setIdentityDismissed(true);
+            }}
+          >×</button>
+          <strong>{t('Who is using this device?')}</strong>
+          <p>{t('Name this browser to request access. Device, browser and network address are recorded for recognition.')}</p>
+          <div className="identity-form">
+            <input value={identityName} onChange={event => setIdentityName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void saveDeviceName(); }} placeholder={t('Your name')} aria-label={t('Your name')} />
+            <button className="btn primary" type="button" onClick={() => void saveDeviceName()} disabled={!deviceId || !identityName.trim()}>{t('Save name')}</button>
+          </div>
+          {identityError && <p className="form-error" role="alert">{identityError}</p>}
+        </section>
+      )}
     </div>
     </AppSettingsContext.Provider>
   );
