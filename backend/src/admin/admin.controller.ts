@@ -35,8 +35,9 @@ export class AdminController {
       throw new BadRequestException('Username and password are required.');
     }
     const token = this.auth.login(body.username, body.password, ip);
+    response.setHeader('Cache-Control', 'no-store');
     response.setHeader('Set-Cookie', this.auth.cookie(token, usesSecureCookies(request)));
-    return { authenticated: true };
+    return { authenticated: true, sessionToken: token };
   }
 
   @Post('logout')

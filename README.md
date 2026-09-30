@@ -74,7 +74,9 @@ npm run build
 
 ## Database & deployment
 
-The Prisma SQLite database is `backend/prisma/dev.db`. This repository does not seed, reset, or import records during builds or deployments. Database content is managed through the authenticated admin panel; schema-only updates are applied with Prisma migrations.
+Local development uses `backend/prisma/dev.db` via `DATABASE_URL=file:./dev.db`. This repository does not seed, reset, or import records during builds or deployments.
+
+**Production SQLite must live on a persistent disk, never in the deployed repository.** Before the next Render deploy, attach a persistent disk mounted at `/var/data`, copy the active production SQLite file to `/var/data/mitra.db` without overwriting it from the repository, and set `DATABASE_URL=file:/var/data/mitra.db` plus `DATABASE_PERSISTENT_DIR=/var/data`. The backend refuses to start if the configured production database is outside the persistent mount or missing; it will not silently create a new empty database after a deploy. Keep builds limited to `npm install && npm run build`; migrations, if needed, are separate, reviewed schema-only commands and must target the same persistent `DATABASE_URL`. Do not use seed, reset, or import commands in production.
 
 For a hosted deployment, configure the pre-deploy step to apply pending schema migrations only:
 
@@ -94,7 +96,7 @@ Legacy seed/import files are disabled in production and their package scripts ha
 
 ### Admin panel
 
-Open `/adminX` to sign in and manage bills, budgets, budget heads, object heads, transfers, districts, users and browser devices. For local development, copy `backend/.env.example` to `backend/.env` and replace both placeholder values with a new password and a random `ADMIN_SESSION_SECRET` of at least 32 characters. The backend loads this file on startup; it is git-ignored. In production, configure both values as server-only deployment secrets instead. Never place credentials in frontend variables or source control. Rotate any password previously shared in chat before deployment. New browser devices start disabled until an admin assigns a user and grants access. Existing device access is preserved by the additive access-control migration.
+Open `/adminX` to sign in and manage bills, budgets, budget heads, object heads, transfers, districts, users and browser devices. The panel uses an expiring, tab-scoped signed session so authentication works when the static frontend and API are hosted on separate origins. For local development, copy `backend/.env.example` to `backend/.env` and replace the placeholder values with a new password and a random `ADMIN_SESSION_SECRET` of at least 32 characters. The backend loads this file on startup; it is git-ignored. In production, configure the admin values as server-only deployment secrets. Never place credentials in frontend variables or source control. Rotate any password previously shared in chat before deployment. Unnamed devices can view tracker records; saving a device name enables editing unless an administrator has disabled that device. Existing device access is preserved by the additive access-control migration.
 
 ## Repository map
 

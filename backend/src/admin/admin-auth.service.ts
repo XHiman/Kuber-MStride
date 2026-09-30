@@ -51,6 +51,10 @@ export class AdminAuthService {
       .map(part => part.trim())
       .find(part => part.startsWith(`${ADMIN_COOKIE_NAME}=`))
       ?.slice(ADMIN_COOKIE_NAME.length + 1);
+    return this.verifySessionToken(token);
+  }
+
+  verifySessionToken(token: string | undefined): boolean {
     if (!token) return false;
 
     const sessionSecret = process.env.ADMIN_SESSION_SECRET;

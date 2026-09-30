@@ -10,13 +10,20 @@ export class AdminSessionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<{
       headers: Record<string, string | undefined>;
     }>();
+    const authorization = request.headers.authorization;
+    const bearerToken = authorization?.startsWith('Bearer ')
+      ? authorization.slice('Bearer '.length)
+      : undefined;
     if (
       !isAllowedAdminOrigin(request.headers.origin)
       || request.headers['x-admin-request'] !== '1'
     ) {
       throw new UnauthorizedException('Admin requests must come from the configured website.');
     }
-    if (!this.auth.verifyCookieHeader(request.headers.cookie)) {
+    if (
+      !this.auth.verifySessionToken(bearerToken)
+      && !this.auth.verifyCookieHeader(request.headers.cookie)
+    ) {
       throw new UnauthorizedException('Admin sign-in is required.');
     }
     return true;

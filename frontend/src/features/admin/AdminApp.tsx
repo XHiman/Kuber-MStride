@@ -4,6 +4,8 @@ import { API_BASE_URL } from '../../lib/api';
 type AdminEntity = 'bills' | 'budgets' | 'budgetHeads' | 'objectHeads' | 'transfers' | 'districts' | 'users' | 'devices';
 type RecordRow = Record<string, unknown> & { id?: string };
 
+const ADMIN_SESSION_KEY = 'mitra-admin-session';
+
 const ENTITIES: { id: AdminEntity; label: string }[] = [
   { id: 'bills', label: 'Bills' },
   { id: 'budgets', label: 'Budgets' },
@@ -16,12 +18,14 @@ const ENTITIES: { id: AdminEntity; label: string }[] = [
 ];
 
 async function adminRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const sessionToken = sessionStorage.getItem(ADMIN_SESSION_KEY);
   const response = await fetch(`${API_BASE_URL}/adminX/api${path}`, {
     ...options,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       'X-Admin-Request': '1',
+      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
       ...options.headers,
     },
   });
@@ -35,6 +39,7 @@ async function adminRequest<T>(path: string, options: RequestInit = {}): Promise
     }
   }
   if (!response.ok) {
+    if (response.status === 401) sessionStorage.removeItem(ADMIN_SESSION_KEY);
     const message = typeof result === 'object' && result !== null && 'message' in result
       ? String((result as { message: unknown }).message)
       : String(result || `Request failed (${response.status}).`);
@@ -133,13 +138,17 @@ export default function AdminApp() {
     setBusy(true);
     setError('');
     try {
-      await adminRequest('/login', {
+      const { sessionToken } = await adminRequest<{ sessionToken: string }>('/login', {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       });
+      if (!sessionToken) throw new Error('The server did not return an admin session.');
+      sessionStorage.setItem(ADMIN_SESSION_KEY, sessionToken);
+      await adminRequest('/session');
       setPassword('');
       setAuthenticated(true);
     } catch (loginError) {
+      sessionStorage.removeItem(ADMIN_SESSION_KEY);
       setError(loginError instanceof Error ? loginError.message : 'Admin sign-in failed.');
     } finally {
       setBusy(false);
@@ -149,6 +158,7 @@ export default function AdminApp() {
   async function logout() {
     try {
       await adminRequest('/logout', { method: 'POST' });
+      sessionStorage.removeItem(ADMIN_SESSION_KEY);
       setAuthenticated(false);
       setRecords([]);
       setSelected(null);
