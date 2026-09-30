@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { API_BASE_URL } from '../../lib/api';
 
 type AdminEntity = 'bills' | 'budgets' | 'budgetHeads' | 'objectHeads' | 'transfers' | 'districts' | 'users' | 'devices';
 type RecordRow = Record<string, unknown> & { id?: string };
@@ -15,7 +16,7 @@ const ENTITIES: { id: AdminEntity; label: string }[] = [
 ];
 
 async function adminRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`/adminX/api${path}`, {
+  const response = await fetch(`${API_BASE_URL}/adminX/api${path}`, {
     ...options,
     credentials: 'include',
     headers: {
