@@ -8,10 +8,11 @@ import {
   Param,
   Post,
   Put,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminService, AdminEntity } from './admin.service';
 import { AdminSessionGuard } from './admin-session.guard';
@@ -27,19 +28,20 @@ export class AdminController {
   login(
     @Body() body: { username?: string; password?: string },
     @Ip() ip: string,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
     if (typeof body.username !== 'string' || typeof body.password !== 'string') {
       throw new BadRequestException('Username and password are required.');
     }
     const token = this.auth.login(body.username, body.password, ip);
-    response.setHeader('Set-Cookie', this.auth.cookie(token, process.env.NODE_ENV === 'production'));
+    response.setHeader('Set-Cookie', this.auth.cookie(token, usesSecureCookies(request)));
     return { authenticated: true };
   }
 
   @Post('logout')
-  logout(@Res({ passthrough: true }) response: Response) {
-    response.setHeader('Set-Cookie', this.auth.clearCookie(process.env.NODE_ENV === 'production'));
+  logout(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    response.setHeader('Set-Cookie', this.auth.clearCookie(usesSecureCookies(request)));
     return { authenticated: false };
   }
 
@@ -86,4 +88,9 @@ export class AdminController {
     }
     return value as AdminEntity;
   }
+}
+
+function usesSecureCookies(request: Request): boolean {
+  const forwardedProto = request.headers['x-forwarded-proto']?.split(',')[0]?.trim().toLowerCase();
+  return process.env.NODE_ENV === 'production' || request.secure || forwardedProto === 'https';
 }

@@ -73,7 +73,7 @@ export class AdminAuthService {
     return [
       `${ADMIN_COOKIE_NAME}=${token}`,
       'HttpOnly',
-      'SameSite=Strict',
+      `SameSite=${secure ? 'None' : 'Strict'}`,
       'Path=/adminX',
       `Max-Age=${SESSION_LIFETIME_SECONDS}`,
       ...(secure ? ['Secure'] : []),
@@ -84,7 +84,7 @@ export class AdminAuthService {
     return [
       `${ADMIN_COOKIE_NAME}=`,
       'HttpOnly',
-      'SameSite=Strict',
+      `SameSite=${secure ? 'None' : 'Strict'}`,
       'Path=/adminX',
       'Max-Age=0',
       ...(secure ? ['Secure'] : []),

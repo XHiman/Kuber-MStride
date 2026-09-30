@@ -2,17 +2,15 @@ import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { getAdminAllowedOrigins } from './admin/admin-origin';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: [
-      'http://localhost:5173',
-      'https://mstride-kuber.onrender.com',
-    ],
+    origin: getAdminAllowedOrigins(),
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-ID'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-ID', 'X-Admin-Request'],
     credentials: true,
   });
 

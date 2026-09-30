@@ -21,6 +21,7 @@ async function adminRequest<T>(path: string, options: RequestInit = {}): Promise
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      'X-Admin-Request': '1',
       ...options.headers,
     },
   });

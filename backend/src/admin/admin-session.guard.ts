@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { AdminAuthService } from './admin-auth.service';
+import { isAllowedAdminOrigin } from './admin-origin';
 
 @Injectable()
 export class AdminSessionGuard implements CanActivate {
@@ -9,9 +10,11 @@ export class AdminSessionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<{
       headers: Record<string, string | undefined>;
     }>();
-    const fetchSite = request.headers['sec-fetch-site'];
-    if (fetchSite === 'cross-site') {
-      throw new UnauthorizedException('Cross-site admin requests are not allowed.');
+    if (
+      !isAllowedAdminOrigin(request.headers.origin)
+      || request.headers['x-admin-request'] !== '1'
+    ) {
+      throw new UnauthorizedException('Admin requests must come from the configured website.');
     }
     if (!this.auth.verifyCookieHeader(request.headers.cookie)) {
       throw new UnauthorizedException('Admin sign-in is required.');

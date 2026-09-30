@@ -7,7 +7,7 @@ import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
 import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
 
-export default function BillsTab({ globalQuery = '' }: { globalQuery?: string }) {
+export default function BillsTab({ globalQuery = '', readOnly = false }: { globalQuery?: string; readOnly?: boolean }) {
   const { t } = useAppSettings();
   const [bills, setBills] = useState<Bill[]>([]);
   const [users, setUsers] = useState<import('../../types').UserProfile[]>([]);
@@ -139,7 +139,7 @@ export default function BillsTab({ globalQuery = '' }: { globalQuery?: string })
           <div className="panel-actions">
             <span className="note">{filtered.length} {t('of')} {bills.length} {t('bills')}</span>
             <ExportActions getRows={getExportRows} filename="bills" />
-            <button className="btn primary" onClick={() => { setEditingBill(null); setShowModal(true); }}>+ {t('Add bill')}</button>
+            {!readOnly && <button className="btn primary" onClick={() => { setEditingBill(null); setShowModal(true); }}>+ {t('Add bill')}</button>}
           </div>
         </div>
         <Filters vendors={vendors} search={search} setSearch={setSearch} vendorFilter={vendorFilter} setVendorFilter={setVendorFilter} stageFilter={stageFilter} setStageFilter={setStageFilter} catFilter={catFilter} setCatFilter={setCatFilter} />
@@ -151,6 +151,7 @@ export default function BillsTab({ globalQuery = '' }: { globalQuery?: string })
           sortDir={sortDir}
           onSort={(k: BillSortKey) => { if (sortBy === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(k); setSortDir('desc'); } }}
           onEdit={(b: Bill) => { setEditingBill(b); setShowModal(true); }}
+          readOnly={readOnly}
         />
         <div className="reg-foot">
           <span>{t('"#" renumbers with your current filter/sort · click Date / Amount to sort · click ✎ to edit')}</span>
@@ -393,9 +394,10 @@ type BillSortKey = 'date' | 'amount';
     sortDir: 'asc' | 'desc';
     onSort: (key: BillSortKey) => void;
     onEdit: (bill: Bill) => void;
+    readOnly: boolean;
   };
 
-function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit }: TableProps & { emptyMessage: string }) {
+function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit, readOnly }: TableProps & { emptyMessage: string }) {
   const { t } = useAppSettings();
   return (
     <div className="table-scroll">
@@ -410,7 +412,7 @@ function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit }: 
 <th className="num sortable" onClick={() => onSort('amount')}>
   {t('Amount')} {sortBy === 'amount' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
 </th>
-            <th>{t('Stage')}</th><th>{t('Cleared FY')}</th><th>{t('Program')}</th><th>{t('District')}</th><th>{t('Assigned person')}</th><th>{t('Payment attribute')}</th><th>{t('Status / tracker remark')}</th><th></th>
+            <th>{t('Stage')}</th><th>{t('Cleared FY')}</th><th>{t('Program')}</th><th>{t('District')}</th><th>{t('Assigned person')}</th><th>{t('Payment attribute')}</th><th>{t('Status / tracker remark')}</th>{!readOnly && <th></th>}
           </tr>
         </thead>
         <tbody>
@@ -428,11 +430,11 @@ function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit }: 
               <td>{users.find(user => user.id === b.assignedUserId)?.name || '—'}</td>
               <td className="status-cell">{b.attribute || '—'}</td>
               <td className="status-cell">{b.status}</td>
-              <td className="row-actions"><button className="btn-icon" onClick={() => onEdit(b)} title={t('Edit')}>✎</button></td>
+              {!readOnly && <td className="row-actions"><button className="btn-icon" onClick={() => onEdit(b)} title={t('Edit')}>✎</button></td>}
             </tr>
           ))}
           {bills.length === 0 && (
-            <tr><td className="empty-table" colSpan={13}>{emptyMessage}</td></tr>
+            <tr><td className="empty-table" colSpan={readOnly ? 12 : 13}>{emptyMessage}</td></tr>
           )}
         </tbody>
       </table>

@@ -102,8 +102,9 @@ export default function App() {
   async function saveDeviceName() {
     if (!deviceId || !identityName.trim()) return;
     try {
-      const user = await apiClient.users.claimDevice(deviceId, identityName);
+      const { user, accessEnabled } = await apiClient.users.claimDevice(deviceId, identityName);
       setCurrentUser(user);
+      setDeviceAccessEnabled(accessEnabled);
       setIdentityName('');
       setIdentityError('');
     } catch (error) {
@@ -233,18 +234,19 @@ export default function App() {
             tabIndex={0}
             hidden={activeTab !== tab.id}
           >
-            {!identityChecked ? <p className="panel">{t('Checking this device…')}</p> : !deviceAccessEnabled ? (
-              <section className="panel access-pending">
-                <h2>{t(currentUser ? 'Access pending approval' : 'Name this device to request access')}</h2>
-                <p>{t(currentUser
-                  ? 'This browser has been registered. An administrator must grant access to this device before it can read or change tracker data.'
-                  : 'Name this browser first. An administrator must then assign a user and grant access before tracker data is available.')}</p>
-              </section>
-            ) : (
+            {!identityChecked ? <p className="panel">{t('Checking this device…')}</p> : (
               <>
-                {tab.id === 'bills' && <BillsTab globalQuery={globalQuery} />}
-                {tab.id === 'budget' && <BudgetTab globalQuery={globalQuery} initialFiscalYear={budgetFiscalYear} />}
-                {tab.id === 'transfers' && <TransfersTab globalQuery={globalQuery} />}
+                {!deviceAccessEnabled && (
+                  <section className="panel access-pending" role="status">
+                    <h2>{t(currentUser ? 'Editing is disabled for this device' : 'Read-only access')}</h2>
+                    <p>{t(currentUser
+                      ? 'This device can view tracker records, but its access was revoked by an administrator.'
+                      : 'You can view bills, budgets and fund transfers. Save a name for this browser to enable editing.')}</p>
+                  </section>
+                )}
+                {tab.id === 'bills' && <BillsTab globalQuery={globalQuery} readOnly={!deviceAccessEnabled} />}
+                {tab.id === 'budget' && <BudgetTab globalQuery={globalQuery} initialFiscalYear={budgetFiscalYear} readOnly={!deviceAccessEnabled} />}
+                {tab.id === 'transfers' && <TransfersTab globalQuery={globalQuery} readOnly={!deviceAccessEnabled} />}
                 {tab.id === 'dashboard' && <DashboardTab user={currentUser} />}
               </>
             )}
@@ -273,7 +275,7 @@ export default function App() {
             }}
           >×</button>
           <strong>{t('Who is using this device?')}</strong>
-          <p>{t('Name this browser to request access. Device, browser and network address are recorded for recognition.')}</p>
+          <p>{t('Name this browser to enable editing. Device, browser and network address are recorded for recognition.')}</p>
           <div className="identity-form">
             <input value={identityName} onChange={event => setIdentityName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void saveDeviceName(); }} placeholder={t('Your name')} aria-label={t('Your name')} />
             <button className="btn primary" type="button" onClick={() => void saveDeviceName()} disabled={!deviceId || !identityName.trim()}>{t('Save name')}</button>

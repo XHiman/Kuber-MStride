@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@
 import { PrismaService } from '../prisma/prisma.service';
 
 const PUBLIC_DEVICE_ROUTES = new Set(['/users/device', '/users/claim']);
+const READ_ONLY_ROUTE_PREFIXES = ['/bills', '/budget', '/transfers', '/districts', '/search'];
 
 @Injectable()
 export class DeviceAccessGuard implements CanActivate {
@@ -16,6 +17,15 @@ export class DeviceAccessGuard implements CanActivate {
     if (request.method === 'OPTIONS') return true;
     const route = request.url.split('?')[0].replace(/\/+$/, '') || '/';
     if (route.startsWith('/adminX/api/') || PUBLIC_DEVICE_ROUTES.has(route)) return true;
+    if (
+      (request.method === 'GET' || request.method === 'HEAD')
+      && (
+        route === '/users'
+        || READ_ONLY_ROUTE_PREFIXES.some(prefix => route === prefix || route.startsWith(`${prefix}/`))
+      )
+    ) {
+      return true;
+    }
 
     const deviceId = request.headers['x-device-id'];
     if (typeof deviceId !== 'string' || !deviceId) {
@@ -23,10 +33,10 @@ export class DeviceAccessGuard implements CanActivate {
     }
     const device = await this.prisma.userDevice.findUnique({
       where: { deviceId },
-      select: { accessEnabled: true },
+      select: { accessEnabled: true, userId: true },
     });
-    if (!device?.accessEnabled) {
-      throw new ForbiddenException('This browser device does not have access. Contact the site administrator.');
+    if (!device?.accessEnabled || !device.userId) {
+      throw new ForbiddenException('Name this browser before making changes, or ask the site administrator to restore its access.');
     }
     return true;
   }

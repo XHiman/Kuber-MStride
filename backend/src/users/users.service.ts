@@ -24,12 +24,20 @@ export class UsersService {
 
     return this.prisma.$transaction(async tx => {
       const device = await tx.userDevice.findUniqueOrThrow({ where: { deviceId }, include: { user: true } });
-      if (device.user) return this.toProfile(device.user);
+      if (device.user) {
+        return {
+          user: this.toProfile(device.user),
+          accessEnabled: device.accessEnabled,
+        };
+      }
 
       const existingUser = await tx.user.findFirst({ where: { name: trimmedName } });
       const user = existingUser ?? await tx.user.create({ data: { name: trimmedName } });
-      await tx.userDevice.update({ where: { deviceId }, data: { userId: user.id } });
-      return this.toProfile(user);
+      await tx.userDevice.update({
+        where: { deviceId },
+        data: { userId: user.id, accessEnabled: true },
+      });
+      return { user: this.toProfile(user), accessEnabled: true };
     });
   }
 

@@ -7,7 +7,7 @@ import ExportActions from '../../components/ExportActions';
 
 const BUDGET_CODE_ORDER = ['01', '06', '10', '11', '13', '14', '16', '17', '21', '24', '26', '27', '28', '31'];
 
-export default function BudgetTab({ globalQuery = '', initialFiscalYear }: { globalQuery?: string; initialFiscalYear?: string }) {
+export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnly = false }: { globalQuery?: string; initialFiscalYear?: string; readOnly?: boolean }) {
   const { t } = useAppSettings();
   const [budget, setBudget] = useState<any>(null);
   const [rows, setRows] = useState<BudgetRow[]>([]);
@@ -140,8 +140,8 @@ function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
   return (
     <td
       data-label={labels[field]}
-      className={`num mono${startsGroup ? ' budget-group-start' : ''} ${fiscalYear === 'FY Total' ? '' : 'edit-cell'}`}
-      contentEditable={fiscalYear !== 'FY Total'}
+      className={`num mono${startsGroup ? ' budget-group-start' : ''} ${fiscalYear === 'FY Total' || readOnly ? '' : 'edit-cell'}`}
+      contentEditable={!readOnly && fiscalYear !== 'FY Total'}
       suppressContentEditableWarning
       onKeyDown={event => {
         if (event.key === 'Enter') {
@@ -150,6 +150,7 @@ function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
         }
       }}
       onBlur={e => {
+        if (readOnly) return;
         const val = parseFloat(
           e.currentTarget.textContent?.replace(/[^\d.-]/g, '') || '0',
         );

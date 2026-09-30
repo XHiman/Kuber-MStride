@@ -6,7 +6,7 @@ import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
 import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
 
-export default function TransfersTab({ globalQuery = '' }: { globalQuery?: string }) {
+export default function TransfersTab({ globalQuery = '', readOnly = false }: { globalQuery?: string; readOnly?: boolean }) {
   const { t } = useAppSettings();
   const translateLabel = t;
   const [transfers, setTransfers] = useState<Transfer[]>([]);
@@ -291,9 +291,9 @@ async function handleTransferSave() {
           <div className="panel-actions">
             <span className="note">{visibleTransfers.length} {t(visibleTransfers.length === 1 ? 'record' : 'records')}</span>
             <ExportActions getRows={getExportRows} filename="transfers" />
-            <button className="btn primary" onClick={openAddTransfer}>
+            {!readOnly && <button className="btn primary" onClick={openAddTransfer}>
   + {t('Add transfer')}
-</button>
+</button>}
           </div>
         </div>
         <div className="table-scroll">
@@ -301,20 +301,20 @@ async function handleTransferSave() {
             <thead>
               <tr>
                 <th>{t('Recipient')}</th><th>{t('Purpose / object code')}</th><th className="num">{t('Amount transferred')}</th>
-                <th>{t('Order date')}</th><th>{t('Release status')}</th><th className="num">{t('Utilized to date')}</th><th className="num">{t('Balance')}</th><th>{t('Remarks')}</th><th></th>
+                <th>{t('Order date')}</th><th>{t('Release status')}</th><th className="num">{t('Utilized to date')}</th><th className="num">{t('Balance')}</th><th>{t('Remarks')}</th>{!readOnly && <th></th>}
               </tr>
             </thead>
             {visibleTransfers.length === 0 ? (
               <tbody>
                 <tr>
-                  <td className="empty-table" colSpan={9}>
+                  <td className="empty-table" colSpan={readOnly ? 8 : 9}>
                     <div className="empty-state">
                       <span className="empty-mark" aria-hidden="true">—</span>
                       <span>
                         <strong>{t('No transfers recorded')}</strong>
                         <small>{t('Record a release to start tracking recipients, utilization, and remaining balances.')}</small>
                       </span>
-                      <button className="btn primary" onClick={openAddTransfer}>+ {t('Add transfer')}</button>
+                      {!readOnly && <button className="btn primary" onClick={openAddTransfer}>+ {t('Add transfer')}</button>}
                     </div>
                   </td>
                 </tr>
@@ -326,7 +326,7 @@ async function handleTransferSave() {
               return (
                 <tbody key={recipient}>
                 <tr className="tot-row">
-                  <td colSpan={9}>
+                  <td colSpan={readOnly ? 8 : 9}>
                     <button
                       className="recipient-group-toggle"
                       type="button"
@@ -357,7 +357,8 @@ async function handleTransferSave() {
                     <td className="num amt-cell mono">{fmtIN(t.amount)}</td>
                     <td className="mono">{t.orderDate ? formatDate(t.orderDate) : '—'}</td>
                     <td><span className={`chip ${t.status}`}><span className="dot" />{translateLabel(t.status === 'transferred' ? 'Transferred' : 'Minutes awaited')}</span></td>
-                    <td className="num edit-cell">
+                    <td className={`num${readOnly ? '' : ' edit-cell'}`}>
+                      {readOnly ? fmtIN(t.utilized) : (
                       <input
                         className="table-edit-input mono"
                         type="number"
@@ -376,10 +377,11 @@ async function handleTransferSave() {
                           if (event.key === 'Enter') event.currentTarget.blur();
                         }}
                       />
+                      )}
                     </td>
                     <td className="num mono">{fmtIN(t.amount - t.utilized)}</td>
                     <td className="status-cell">{t.remarks || '—'}</td>
-                    <td className="row-actions"><button className="btn-icon" onClick={() => openEditTransfer(t)} title={translateLabel('Edit')}>✎</button></td>
+                    {!readOnly && <td className="row-actions"><button className="btn-icon" onClick={() => openEditTransfer(t)} title={translateLabel('Edit')}>✎</button></td>}
                   </tr>
                 ))}
                 </tbody>
@@ -389,7 +391,7 @@ async function handleTransferSave() {
         </div>
         <p className="reg-foot" style={{ marginTop: 10 }}>
           <span>{t('Each row is one transfer. Linked cleared bills update that transfer’s utilized total; its amount is counted against the selected budget year/head when transferred.')}</span>
-          <span>{t('Click "Utilized" to edit')}</span>
+          {!readOnly && <span>{t('Click "Utilized" to edit')}</span>}
         </p>
       </div>
 
@@ -399,7 +401,7 @@ async function handleTransferSave() {
           <h2>{t('District Incentive Fund — DLI-1 performance grants')}</h2>
           <div className="panel-actions">
             <span className="note">{t('₹8 Cr / ₹12 Cr / ₹16 Cr brackets per qualifying district · per the Incentive GR dated 15 Apr 2026')}</span>
-            <button className="btn primary" onClick={() => setShowDistrictForm(true)}>+ {t('Add district')}</button>
+            {!readOnly && <button className="btn primary" onClick={() => setShowDistrictForm(true)}>+ {t('Add district')}</button>}
           </div>
         </div>
         {districtStats && (
@@ -428,7 +430,8 @@ async function handleTransferSave() {
                 <tr key={d.id}>
                   <td className="vendor-cell">{d.district}</td>
                   <td className="status-cell">{d.division}</td>
-                  <td className="num edit-cell">
+                  <td className={`num${readOnly ? '' : ' edit-cell'}`}>
+                    {readOnly ? fmtIN(d.amount) : (
                     <input
                       className="table-edit-input mono"
                       type="number"
@@ -446,8 +449,10 @@ async function handleTransferSave() {
                         if (event.key === 'Enter') event.currentTarget.blur();
                       }}
                     />
+                    )}
                   </td>
-                  <td className="edit-cell">
+                  <td className={readOnly ? '' : 'edit-cell'}>
+                    {readOnly ? (d.releaseDate ? formatDate(d.releaseDate) : '—') : (
                     <input
                       className="table-edit-input mono"
                       type="date"
@@ -460,8 +465,10 @@ async function handleTransferSave() {
                         }
                       }}
                     />
+                    )}
                   </td>
-                  <td className="edit-cell">
+                  <td className={readOnly ? '' : 'edit-cell'}>
+                    {readOnly ? (d.remarks || '—') : (
                     <input
                       className="table-edit-input mono"
                       type="text"
@@ -478,6 +485,7 @@ async function handleTransferSave() {
                         if (event.key === 'Enter') event.currentTarget.blur();
                       }}
                     />
+                    )}
                   </td>
                 </tr>
               ))}
@@ -486,11 +494,11 @@ async function handleTransferSave() {
         </div>
         <p className="reg-foot" style={{ marginTop: 10 }}>
           <span>{t('All 36 districts listed by division; fund design (brackets only) is finalized but district-wise qualification scoring and disbursement are not yet in any source record — fill in as SSC/Finance Dept. approves releases.')}</span>
-          <span>{t('Click a cell to edit')}</span>
+          {!readOnly && <span>{t('Click a cell to edit')}</span>}
         </p>
       </div>
 
-      {showModal && (
+      {!readOnly && showModal && (
   <div
     className="modal-overlay"
     onClick={e => {
@@ -669,7 +677,7 @@ async function handleTransferSave() {
     </div>
   </div>
 )}
-    {showDistrictForm && (
+    {!readOnly && showDistrictForm && (
       <div className="modal-overlay" onClick={event => {
         if (event.target === event.currentTarget) setShowDistrictForm(false);
       }}>

@@ -76,7 +76,7 @@ export const apiClient = {
         body: JSON.stringify({ deviceId, userAgent }),
       }),
     claimDevice: (deviceId: string, name: string) =>
-      api<import('../types').UserProfile>('/users/claim', {
+      api<{ user: import('../types').UserProfile; accessEnabled: boolean }>('/users/claim', {
         method: 'POST',
         body: JSON.stringify({ deviceId, name }),
       }),
