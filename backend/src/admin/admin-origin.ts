@@ -1,17 +1,23 @@
-const DEFAULT_ADMIN_ORIGINS = [
+const DEVELOPMENT_ADMIN_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:5173',
-  'https://mstride-kuber.onrender.com',
 ];
 
 export function getAdminAllowedOrigins(): string[] {
-  const configured = process.env.FRONTEND_ORIGIN
-    ?.split(',')
-    .map(origin => origin.trim().replace(/\/+$/, ''))
-    .filter(Boolean) ?? [];
-  return [...new Set([...DEFAULT_ADMIN_ORIGINS, ...configured])];
+  const configured = (process.env.FRONTEND_ORIGIN ?? '')
+    .split(',')
+    .map(value => normalizeOrigin(value))
+    .filter((origin): origin is string => origin !== null);
+  if (configured.length) return [...new Set(configured)];
+  return process.env.NODE_ENV === 'production' ? [] : DEVELOPMENT_ADMIN_ORIGINS;
 }
 
-export function isAllowedAdminOrigin(origin: string | undefined): boolean {
-  return origin !== undefined && getAdminAllowedOrigins().includes(origin.replace(/\/+$/, ''));
+function normalizeOrigin(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
 }

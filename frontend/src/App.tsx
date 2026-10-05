@@ -26,12 +26,7 @@ export default function App() {
   });
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem('mitra-language') === 'mr' ? 'mr' : 'en');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [deviceAccessEnabled, setDeviceAccessEnabled] = useState(false);
-  const [deviceId, setDeviceId] = useState('');
-  const [identityChecked, setIdentityChecked] = useState(false);
-  const [identityName, setIdentityName] = useState('');
-  const [identityError, setIdentityError] = useState('');
-  const [identityDismissed, setIdentityDismissed] = useState(false);
+  const [userSessionChecked, setUserSessionChecked] = useState(false);
   const [globalQuery, setGlobalQuery] = useState('');
   const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -52,20 +47,17 @@ export default function App() {
   }, [language]);
 
   useEffect(() => {
-    let id = localStorage.getItem('mitra-device-id');
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem('mitra-device-id', id);
+    if (!sessionStorage.getItem('mitra-user-session')) {
+      setUserSessionChecked(true);
+      return;
     }
-    setDeviceId(id);
-    setIdentityDismissed(sessionStorage.getItem(`mitra-profile-dismissed:${id}`) === 'true');
-    apiClient.users.registerDevice(id, navigator.userAgent)
-      .then(({ user, accessEnabled }) => {
-        setCurrentUser(user);
-        setDeviceAccessEnabled(accessEnabled);
+    apiClient.users.session()
+      .then(setCurrentUser)
+      .catch(() => {
+        sessionStorage.removeItem('mitra-user-session');
+        setCurrentUser(null);
       })
-      .catch(error => setIdentityError(error instanceof Error ? error.message : t('Could not register this device.')))
-      .finally(() => setIdentityChecked(true));
+      .finally(() => setUserSessionChecked(true));
   }, []);
 
   useEffect(() => {
@@ -99,17 +91,15 @@ export default function App() {
     tabRefs.current[nextIndex]?.focus();
   }
 
-  async function saveDeviceName() {
-    if (!deviceId || !identityName.trim()) return;
-    try {
-      const { user, accessEnabled } = await apiClient.users.claimDevice(deviceId, identityName);
-      setCurrentUser(user);
-      setDeviceAccessEnabled(accessEnabled);
-      setIdentityName('');
-      setIdentityError('');
-    } catch (error) {
-      setIdentityError(error instanceof Error ? error.message : t('Could not save this user name.'));
-    }
+  async function loginUser(username: string, password: string) {
+    const result = await apiClient.users.login(username, password);
+    sessionStorage.setItem('mitra-user-session', result.sessionToken);
+    setCurrentUser(result.user);
+  }
+
+  function logoutUser() {
+    sessionStorage.removeItem('mitra-user-session');
+    setCurrentUser(null);
   }
 
   function openSearchResult(result: GlobalSearchResult) {
@@ -234,21 +224,16 @@ export default function App() {
             tabIndex={0}
             hidden={activeTab !== tab.id}
           >
-            {!identityChecked ? <p className="panel">{t('Checking this device…')}</p> : (
-              <>
-                {!deviceAccessEnabled && (
-                  <section className="panel access-pending" role="status">
-                    <h2>{t(currentUser ? 'Editing is disabled for this device' : 'Read-only access')}</h2>
-                    <p>{t(currentUser
-                      ? 'This device can view tracker records, but its access was revoked by an administrator.'
-                      : 'You can view bills, budgets and fund transfers. Save a name for this browser to enable editing.')}</p>
-                  </section>
-                )}
-                {tab.id === 'bills' && <BillsTab globalQuery={globalQuery} readOnly={!deviceAccessEnabled} />}
-                {tab.id === 'budget' && <BudgetTab globalQuery={globalQuery} initialFiscalYear={budgetFiscalYear} readOnly={!deviceAccessEnabled} />}
-                {tab.id === 'transfers' && <TransfersTab globalQuery={globalQuery} readOnly={!deviceAccessEnabled} />}
-                {tab.id === 'dashboard' && <DashboardTab user={currentUser} />}
-              </>
+            {tab.id === 'bills' && <BillsTab globalQuery={globalQuery} />}
+            {tab.id === 'budget' && <BudgetTab globalQuery={globalQuery} initialFiscalYear={budgetFiscalYear} />}
+            {tab.id === 'transfers' && <TransfersTab globalQuery={globalQuery} />}
+            {tab.id === 'dashboard' && (
+              <DashboardTab
+                user={currentUser}
+                sessionLoading={!userSessionChecked}
+                onLogin={loginUser}
+                onLogout={logoutUser}
+              />
             )}
           </div>
         ))}
@@ -263,26 +248,6 @@ export default function App() {
         </details>
         <span className="footer-credit">{t('Made by XHiman')}</span>
       </footer>
-      {identityChecked && !currentUser && !identityDismissed && (
-        <section className="identity-prompt" aria-label={t('Name this device')}>
-          <button
-            className="identity-dismiss"
-            type="button"
-            aria-label={t('Dismiss')}
-            onClick={() => {
-              if (deviceId) sessionStorage.setItem(`mitra-profile-dismissed:${deviceId}`, 'true');
-              setIdentityDismissed(true);
-            }}
-          >×</button>
-          <strong>{t('Who is using this device?')}</strong>
-          <p>{t('Name this browser to enable editing. Device, browser and network address are recorded for recognition.')}</p>
-          <div className="identity-form">
-            <input value={identityName} onChange={event => setIdentityName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void saveDeviceName(); }} placeholder={t('Your name')} aria-label={t('Your name')} />
-            <button className="btn primary" type="button" onClick={() => void saveDeviceName()} disabled={!deviceId || !identityName.trim()}>{t('Save name')}</button>
-          </div>
-          {identityError && <p className="form-error" role="alert">{identityError}</p>}
-        </section>
-      )}
     </div>
     </AppSettingsContext.Provider>
   );

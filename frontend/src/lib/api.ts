@@ -1,11 +1,11 @@
 export const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const deviceId = localStorage.getItem('mitra-device-id');
+  const userToken = sessionStorage.getItem('mitra-user-session');
   const res = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       'Content-Type': 'application/json',
-      ...(deviceId ? { 'X-Device-ID': deviceId } : {}),
+      ...(userToken ? { Authorization: `Bearer ${userToken}` } : {}),
       ...options?.headers,
     },
     credentials: 'include',
@@ -70,20 +70,13 @@ export const apiClient = {
   },
   users: {
     list: () => api<import('../types').UserProfile[]>('/users'),
-    registerDevice: (deviceId: string, userAgent: string) =>
-      api<{ user: import('../types').UserProfile | null; accessEnabled: boolean }>('/users/device', {
+    login: (username: string, password: string) =>
+      api<{ sessionToken: string; user: import('../types').UserProfile }>('/users/login', {
         method: 'POST',
-        body: JSON.stringify({ deviceId, userAgent }),
+        body: JSON.stringify({ username, password }),
       }),
-    claimDevice: (deviceId: string, name: string) =>
-      api<{ user: import('../types').UserProfile; accessEnabled: boolean }>('/users/claim', {
-        method: 'POST',
-        body: JSON.stringify({ deviceId, name }),
-      }),
-    update: (id: string, data: Pick<import('../types').UserProfile, 'name' | 'programs' | 'districts'>) =>
-      api<import('../types').UserProfile>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    dashboard: (id: string) =>
-      api<any>(`/users/dashboard/${encodeURIComponent(id)}`),
+    session: () => api<import('../types').UserProfile>('/users/session'),
+    dashboard: () => api<any>('/users/dashboard'),
   },
   search: (query: string) =>
     api<import('../types').GlobalSearchResult[]>(`/search?${new URLSearchParams({ q: query })}`),

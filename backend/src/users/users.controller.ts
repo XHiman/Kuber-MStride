@@ -1,28 +1,22 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
 import { UsersService } from './users.service';
+import { UserAuthService } from './user-auth.service';
+import { UserSessionGuard } from './user-session.guard';
 
 @Controller('users')
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly auth: UserAuthService,
+  ) {}
 
-  @Post('device')
-  registerDevice(
-    @Body() data: { deviceId?: string; userAgent?: string },
-    @Req() request: { ip?: string },
-  ) {
-    if (!data.deviceId || !data.userAgent) {
-      throw new BadRequestException('Device ID and browser details are required.');
+  @Post('login')
+  login(@Body() data: { username?: string; password?: string }) {
+    if (typeof data.username !== 'string' || typeof data.password !== 'string') {
+      throw new BadRequestException('Username and password are required.');
     }
-    const ipAddress = request.ip ?? null;
-    return this.usersService.registerDevice(data.deviceId, data.userAgent, ipAddress);
-  }
-
-  @Post('claim')
-  claimDevice(@Body() data: { deviceId?: string; name?: string }) {
-    if (!data.deviceId || !data.name) {
-      throw new BadRequestException('Device ID and user name are required.');
-    }
-    return this.usersService.claimDevice(data.deviceId, data.name);
+    return this.auth.login(data.username, data.password);
   }
 
   @Get()
@@ -30,16 +24,15 @@ export class UsersController {
     return this.usersService.list();
   }
 
-  @Get('dashboard/:id')
-  dashboard(@Param('id') id: string) {
-    return this.usersService.getDashboard(id);
+  @Get('session')
+  @UseGuards(UserSessionGuard)
+  session(@Req() request: Request & { userId: string }) {
+    return this.usersService.getProfile(request.userId);
   }
 
-  @Put(':id')
-  update(
-    @Param('id') id: string,
-    @Body() data: { name?: string; programs?: string[]; districts?: string[] },
-  ) {
-    return this.usersService.update(id, data);
+  @Get('dashboard')
+  @UseGuards(UserSessionGuard)
+  dashboard(@Req() request: Request & { userId: string }) {
+    return this.usersService.getDashboard(request.userId);
   }
 }

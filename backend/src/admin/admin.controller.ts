@@ -4,7 +4,6 @@ import {
   Controller,
   Delete,
   Get,
-  Ip,
   Param,
   Post,
   Put,
@@ -27,14 +26,13 @@ export class AdminController {
   @Post('login')
   login(
     @Body() body: { username?: string; password?: string },
-    @Ip() ip: string,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
     if (typeof body.username !== 'string' || typeof body.password !== 'string') {
       throw new BadRequestException('Username and password are required.');
     }
-    const token = this.auth.login(body.username, body.password, ip);
+    const token = this.auth.login(body.username, body.password);
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('Set-Cookie', this.auth.cookie(token, usesSecureCookies(request)));
     return { authenticated: true, sessionToken: token };
@@ -50,6 +48,29 @@ export class AdminController {
   @UseGuards(AdminSessionGuard)
   session() {
     return { authenticated: true, username: 'XHiman' };
+  }
+
+  @Get('database/backup')
+  @UseGuards(AdminSessionGuard)
+  async backup(@Res({ passthrough: true }) response: Response) {
+    response.setHeader('Cache-Control', 'no-store');
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="mahastride-backup-${new Date().toISOString().slice(0, 10)}.json"`,
+    );
+    return this.admin.createBackup();
+  }
+
+  @Post('database/restore')
+  @UseGuards(AdminSessionGuard)
+  restore(@Body() body: unknown) {
+    return this.admin.restoreBackup(body);
+  }
+
+  @Post('import/:entity')
+  @UseGuards(AdminSessionGuard)
+  importRows(@Param('entity') entity: string, @Body() body: { rows?: unknown }) {
+    return this.admin.importRows(this.entity(entity), body?.rows);
   }
 
   @Get(':entity')
@@ -82,7 +103,7 @@ export class AdminController {
 
   private entity(value: string): AdminEntity {
     const entities: AdminEntity[] = [
-      'bills', 'budgets', 'budgetHeads', 'objectHeads', 'transfers', 'districts', 'users', 'devices',
+      'bills', 'budgets', 'budgetHeads', 'objectHeads', 'transfers', 'districts', 'users',
     ];
     if (!entities.includes(value as AdminEntity)) {
       throw new BadRequestException(`Unsupported admin entity: ${value}`);

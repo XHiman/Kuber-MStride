@@ -1,6 +1,5 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { AdminAuthService } from './admin-auth.service';
-import { isAllowedAdminOrigin } from './admin-origin';
 
 @Injectable()
 export class AdminSessionGuard implements CanActivate {
@@ -14,12 +13,6 @@ export class AdminSessionGuard implements CanActivate {
     const bearerToken = authorization?.startsWith('Bearer ')
       ? authorization.slice('Bearer '.length)
       : undefined;
-    if (
-      !isAllowedAdminOrigin(request.headers.origin)
-      || request.headers['x-admin-request'] !== '1'
-    ) {
-      throw new UnauthorizedException('Admin requests must come from the configured website.');
-    }
     if (
       !this.auth.verifySessionToken(bearerToken)
       && !this.auth.verifyCookieHeader(request.headers.cookie)

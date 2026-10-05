@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { apiClient } from '../../lib/api';
 import type { Bill, UserProfile } from '../../types';
 import { fmtIN, fmtShort } from '../bills/utils';
@@ -13,23 +13,61 @@ interface PersonalDashboard {
   districtRecords: { id: string; district: string; division: string; amount: number; releaseDate: string | null }[];
 }
 
-export default function DashboardTab({ user }: { user: UserProfile | null }) {
+interface DashboardTabProps {
+  user: UserProfile | null;
+  sessionLoading: boolean;
+  onLogin: (username: string, password: string) => Promise<void>;
+  onLogout: () => void;
+}
+
+export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }: DashboardTabProps) {
   const { t } = useAppSettings();
   const [dashboard, setDashboard] = useState<PersonalDashboard | null>(null);
   const [error, setError] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
 
   useEffect(() => {
     if (!user) {
       setDashboard(null);
       return;
     }
-    apiClient.users.dashboard(user.id)
+    apiClient.users.dashboard()
       .then((data: PersonalDashboard) => { setDashboard(data); setError(''); })
       .catch(loadError => setError(loadError instanceof Error ? loadError.message : t('Could not load the dashboard.')));
   }, [user?.id]);
 
   if (!user) {
-    return <div className="panel"><h2>{t('Personal dashboard')}</h2><p>{t('Name this device to see your assigned bills and dashboard scope.')}</p></div>;
+    if (sessionLoading) return <div className="panel"><p>{t('Checking your sign-in…')}</p></div>;
+    async function submitLogin(event: FormEvent<HTMLFormElement>) {
+      event.preventDefault();
+      setLoginBusy(true);
+      setLoginError('');
+      try {
+        await onLogin(username, password);
+        setPassword('');
+      } catch (loginFailure) {
+        setLoginError(loginFailure instanceof Error ? loginFailure.message : t('Could not sign in.'));
+      } finally {
+        setLoginBusy(false);
+      }
+    }
+    return (
+      <div className="panel dashboard-login">
+        <h2>{t('Personal dashboard')}</h2>
+        <p>{t('Sign in with the username and password provided by your administrator. The bills, budget and transfer workspaces remain available without signing in.')}</p>
+        <form onSubmit={event => void submitLogin(event)}>
+          <label htmlFor="dashboard-username">{t('Username')}</label>
+          <input id="dashboard-username" autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} required />
+          <label htmlFor="dashboard-password">{t('Password')}</label>
+          <input id="dashboard-password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required />
+          {loginError && <p className="form-error" role="alert">{loginError}</p>}
+          <button className="btn primary" disabled={loginBusy}>{loginBusy ? t('Signing in…') : t('Sign in')}</button>
+        </form>
+      </div>
+    );
   }
   if (error) return <div className="panel"><p className="form-error" role="alert">{error}</p></div>;
   if (!dashboard) return <div className="panel"><p>{t('Loading your dashboard…')}</p></div>;
@@ -40,6 +78,7 @@ export default function DashboardTab({ user }: { user: UserProfile | null }) {
         <div className="panel-head">
           <h2>{t('Personal dashboard')} · {user.name}</h2>
           <span className="note">{[...user.programs, ...user.districts].join(' · ') || t('No program or district scope set')}</span>
+          <button className="btn" type="button" onClick={onLogout}>{t('Sign out')}</button>
         </div>
         <div className="stats n4">
           {[

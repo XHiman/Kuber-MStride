@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillsService } from '../bills/bills.service';
 import { TransfersService, type TransferInput } from '../transfers/transfers.service';
+import { UserAuthService } from '../users/user-auth.service';
 
 export type AdminEntity =
   | 'bills'
@@ -11,10 +12,22 @@ export type AdminEntity =
   | 'objectHeads'
   | 'transfers'
   | 'districts'
-  | 'users'
-  | 'devices';
+  | 'users';
 
 type JsonRecord = Record<string, unknown>;
+
+const BACKUP_FORMAT = 'mahastride-database-backup';
+const BACKUP_VERSION = 2;
+const BACKUP_TABLES = [
+  'bills',
+  'budgets',
+  'budgetHeads',
+  'objectHeads',
+  'transfers',
+  'transferHistory',
+  'districts',
+  'users',
+] as const;
 
 @Injectable()
 export class AdminService {
@@ -22,7 +35,130 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly bills: BillsService,
     private readonly transfers: TransfersService,
+    private readonly userAuth: UserAuthService,
   ) {}
+
+  async importRows(entity: AdminEntity, rows: unknown): Promise<{
+    imported: number;
+    failed: { row: number; error: string }[];
+  }> {
+    if (!['bills', 'budgets', 'budgetHeads', 'objectHeads', 'transfers', 'districts', 'users'].includes(entity)) {
+      throw new BadRequestException('Spreadsheet import is not supported for this table.');
+    }
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new BadRequestException('The spreadsheet must contain at least one data row.');
+    }
+    if (rows.length > 5000) {
+      throw new BadRequestException('A spreadsheet import is limited to 5,000 rows.');
+    }
+
+    const billReferences = entity === 'bills' ? await this.loadBillReferences() : null;
+    let imported = 0;
+    const failed: { row: number; error: string }[] = [];
+    for (const [index, row] of rows.entries()) {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        failed.push({ row: index + 2, error: 'Each data row must contain named columns.' });
+        continue;
+      }
+      const sourceRow = (row as JsonRecord)._sourceRow;
+      const rowNumber = typeof sourceRow === 'number' && Number.isInteger(sourceRow) && sourceRow > 1
+        ? sourceRow
+        : index + 2;
+      try {
+        if (billReferences) this.validateBillReferences(row as JsonRecord, billReferences);
+        await this.create(entity, row as JsonRecord);
+        imported += 1;
+      } catch (error) {
+        failed.push({ row: rowNumber, error: this.importErrorMessage(error) });
+      }
+    }
+    return { imported, failed };
+  }
+
+  async createBackup() {
+    const [bills, budgets, budgetHeads, objectHeads, transfers, transferHistory, districts, users] =
+      await Promise.all([
+        this.prisma.bill.findMany(),
+        this.prisma.budget.findMany(),
+        this.prisma.budgetHead.findMany(),
+        this.prisma.objectHead.findMany(),
+        this.prisma.transfer.findMany(),
+        this.prisma.transferHistory.findMany(),
+        this.prisma.district.findMany(),
+        this.prisma.user.findMany(),
+      ]);
+
+    return {
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      tables: { bills, budgets, budgetHeads, objectHeads, transfers, transferHistory, districts, users },
+    };
+  }
+
+  async restoreBackup(input: unknown): Promise<{ restored: Record<string, number> }> {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new BadRequestException('The backup file must contain a JSON object.');
+    }
+    const backup = input as JsonRecord;
+    if (backup.format !== BACKUP_FORMAT || (backup.version !== 1 && backup.version !== BACKUP_VERSION)) {
+      throw new BadRequestException('This is not a supported MahaSTRIDE database backup.');
+    }
+    if (!backup.tables || typeof backup.tables !== 'object' || Array.isArray(backup.tables)) {
+      throw new BadRequestException('The backup is missing its tables.');
+    }
+
+    const tables = backup.tables as JsonRecord;
+    const data = {
+      budgetHeads: this.backupRows(tables, 'budgetHeads', ['code', 'name', 'description']),
+      objectHeads: this.backupRows(tables, 'objectHeads', ['code', 'name', 'nameMr']),
+      users: this.backupRows(tables, 'users', [
+        'id', 'username', 'passwordHash', 'name', 'programs', 'districts', 'createdAt', 'updatedAt',
+      ], ['createdAt', 'updatedAt']),
+      budgets: this.backupRows(tables, 'budgets', [
+        'id', 'code', 'fiscalYear', 'name', 'nameMr', 'prov215', 'exp215', 'prov224', 'exp224', 'prov233', 'exp233',
+      ]),
+      transfers: this.backupRows(tables, 'transfers', [
+        'id', 'recipient', 'scopeType', 'purpose', 'objectCode', 'amount', 'fiscalYear', 'budgetCode',
+        'orderDate', 'status', 'utilized', 'remarks', 'source', 'createdAt', 'updatedAt',
+      ], ['orderDate', 'createdAt', 'updatedAt']),
+      districts: this.backupRows(tables, 'districts', [
+        'id', 'district', 'division', 'amount', 'releaseDate', 'remarks', 'source', 'createdAt', 'updatedAt',
+      ], ['releaseDate', 'createdAt', 'updatedAt']),
+      bills: this.backupRows(tables, 'bills', [
+        'id', 'sr', 'vendor', 'invoice', 'date', 'amount', 'budgetCode', 'objectHead', 'transferId',
+        'program', 'district', 'assignedUserId', 'bucket', 'cat', 'status', 'attribute', 'note',
+        'days', 'clearedFY', 'source', 'createdAt', 'updatedAt',
+      ], ['date', 'createdAt', 'updatedAt']),
+      transferHistory: this.backupRows(tables, 'transferHistory', [
+        'id', 'transferId', 'changedAt', 'field', 'oldValue', 'newValue',
+      ], ['changedAt']),
+    };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.transferHistory.deleteMany();
+      await tx.bill.deleteMany();
+      await tx.transfer.deleteMany();
+      await tx.budget.deleteMany();
+      await tx.district.deleteMany();
+      await tx.budgetHead.deleteMany();
+      await tx.objectHead.deleteMany();
+      await tx.user.deleteMany();
+
+      if (data.budgetHeads.length) await tx.budgetHead.createMany({ data: data.budgetHeads as Prisma.BudgetHeadCreateManyInput[] });
+      if (data.objectHeads.length) await tx.objectHead.createMany({ data: data.objectHeads as Prisma.ObjectHeadCreateManyInput[] });
+      if (data.users.length) await tx.user.createMany({ data: data.users as Prisma.UserCreateManyInput[] });
+      if (data.budgets.length) await tx.budget.createMany({ data: data.budgets as Prisma.BudgetCreateManyInput[] });
+      if (data.transfers.length) await tx.transfer.createMany({ data: data.transfers as Prisma.TransferCreateManyInput[] });
+      if (data.districts.length) await tx.district.createMany({ data: data.districts as Prisma.DistrictCreateManyInput[] });
+      if (data.bills.length) await tx.bill.createMany({ data: data.bills as Prisma.BillCreateManyInput[] });
+      if (data.transferHistory.length) {
+        await tx.transferHistory.createMany({ data: data.transferHistory as Prisma.TransferHistoryCreateManyInput[] });
+      }
+    }, { maxWait: 10000, timeout: 60000 });
+
+    return { restored: Object.fromEntries(BACKUP_TABLES.map(table => [table, data[table].length])) };
+  }
 
   async list(entity: AdminEntity): Promise<unknown[]> {
     switch (entity) {
@@ -39,12 +175,22 @@ export class AdminService {
       case 'districts':
         return this.prisma.district.findMany({ orderBy: [{ division: 'asc' }, { district: 'asc' }] });
       case 'users':
-        return this.prisma.user.findMany({ orderBy: { name: 'asc' } });
-      case 'devices':
-        return this.prisma.userDevice.findMany({
-          orderBy: { lastSeenAt: 'desc' },
-          include: { user: { select: { id: true, name: true } } },
-        });
+        return (await this.prisma.user.findMany({
+          orderBy: { name: 'asc' },
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            programs: true,
+            districts: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        })).map(user => ({
+          ...user,
+          programs: this.stringList(JSON.parse(user.programs) as unknown),
+          districts: this.stringList(JSON.parse(user.districts) as unknown),
+        }));
     }
   }
 
@@ -54,7 +200,7 @@ export class AdminService {
         const value = this.pick(input, [
           'sr', 'vendor', 'invoice', 'date', 'amount', 'budgetCode', 'objectHead',
           'transferId', 'program', 'district', 'assignedUserId', 'bucket', 'cat',
-          'status', 'attribute', 'note', 'days', 'source',
+          'status', 'attribute', 'note', 'days', 'clearedFY', 'source',
         ]);
         this.requireString(value, 'vendor');
         this.requireString(value, 'invoice');
@@ -144,32 +290,20 @@ export class AdminService {
         });
       }
       case 'users': {
-        const value = this.pick(input, ['name', 'programs', 'districts']);
+        const value = this.pick(input, ['username', 'password', 'name', 'programs', 'districts']);
+        const username = this.requireUsername(value);
+        await this.ensureUsernameAvailable(username);
+        const passwordHash = await this.userAuth.hashPassword(this.requireString(value, 'password'));
         return this.prisma.user.create({
           data: {
+            username,
+            passwordHash,
             name: this.requireString(value, 'name'),
             programs: JSON.stringify(this.stringList(value.programs)),
             districts: JSON.stringify(this.stringList(value.districts)),
           },
-        });
-      }
-      case 'devices': {
-        const value = this.pick(input, ['deviceId', 'ipAddress', 'userAgent', 'userId', 'accessEnabled']);
-        const userId = this.nullableString(value.userId);
-        if (value.accessEnabled !== undefined && typeof value.accessEnabled !== 'boolean') {
-          throw new BadRequestException('accessEnabled must be true or false.');
-        }
-        if (value.accessEnabled === true && !userId) {
-          throw new BadRequestException('Assign a user before enabling device access.');
-        }
-        if (userId) await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-        return this.prisma.userDevice.create({
-          data: {
-            deviceId: this.requireString(value, 'deviceId'),
-            ipAddress: this.nullableString(value.ipAddress),
-            userAgent: this.requireString(value, 'userAgent'),
-            userId,
-            accessEnabled: Boolean(userId) && value.accessEnabled === true,
+          select: {
+            id: true, username: true, name: true, programs: true, districts: true, createdAt: true, updatedAt: true,
           },
         });
       }
@@ -236,48 +370,28 @@ export class AdminService {
         });
       }
       case 'users': {
-        const value = this.pick(input, ['name', 'programs', 'districts']);
-        this.validateOptionalStringFields(value, ['name']);
+        const value = this.pick(input, ['username', 'password', 'name', 'programs', 'districts']);
+        this.validateOptionalStringFields(value, ['username', 'password', 'name']);
         if (this.hasOwn(value, 'name') && value.name === null) {
           throw new BadRequestException('name must be a non-empty string.');
         }
+        const username = this.hasOwn(value, 'username') ? this.requireUsername(value) : undefined;
+        if (username !== undefined) await this.ensureUsernameAvailable(username, id);
+        const passwordHash = this.hasOwn(value, 'password')
+          ? await this.userAuth.hashPassword(this.requireString(value, 'password'))
+          : undefined;
         return this.prisma.user.update({
           where: { id },
           data: {
+            ...(username !== undefined && { username }),
+            ...(passwordHash !== undefined && { passwordHash }),
             ...(this.hasOwn(value, 'name') && { name: this.requireString(value, 'name') }),
             ...(this.hasOwn(value, 'programs') && { programs: JSON.stringify(this.stringList(value.programs)) }),
             ...(this.hasOwn(value, 'districts') && { districts: JSON.stringify(this.stringList(value.districts)) }),
           },
-        });
-      }
-      case 'devices': {
-        const value = this.pick(input, ['ipAddress', 'userAgent', 'userId', 'accessEnabled']);
-        this.validateOptionalStringFields(value, ['userAgent']);
-        if (this.hasOwn(value, 'accessEnabled') && typeof value.accessEnabled !== 'boolean') {
-          throw new BadRequestException('accessEnabled must be true or false.');
-        }
-        const userId = this.nullableString(value.userId);
-        if (userId) await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-        const current = await this.prisma.userDevice.findUniqueOrThrow({
-          where: { id },
-          select: { userId: true, accessEnabled: true },
-        });
-        const nextUserId = this.hasOwn(value, 'userId') ? userId : current.userId;
-        if (value.accessEnabled === true && !nextUserId) {
-          throw new BadRequestException('Assign a user before enabling device access.');
-        }
-        const requestedAccess = this.hasOwn(value, 'accessEnabled')
-          ? value.accessEnabled === true
-          : current.accessEnabled;
-        return this.prisma.userDevice.update({
-          where: { id },
-          data: {
-            ...(this.hasOwn(value, 'ipAddress') && { ipAddress: this.nullableString(value.ipAddress) }),
-            ...(this.hasOwn(value, 'userAgent') && { userAgent: this.requireString(value, 'userAgent') }),
-            ...(this.hasOwn(value, 'userId') && { userId }),
-            accessEnabled: Boolean(nextUserId) && requestedAccess,
+          select: {
+            id: true, username: true, name: true, programs: true, districts: true, createdAt: true, updatedAt: true,
           },
-          include: { user: { select: { id: true, name: true } } },
         });
       }
     }
@@ -299,8 +413,6 @@ export class AdminService {
         return this.prisma.district.delete({ where: { id } });
       case 'users':
         return this.prisma.user.delete({ where: { id } });
-      case 'devices':
-        return this.prisma.userDevice.delete({ where: { id } });
     }
   }
 
@@ -374,12 +486,132 @@ export class AdminService {
     return value;
   }
 
+  private backupRows(
+    tables: JsonRecord,
+    table: string,
+    fields: string[],
+    dateFields: string[] = [],
+  ): JsonRecord[] {
+    const rows = tables[table];
+    if (!Array.isArray(rows)) {
+      throw new BadRequestException(`The backup is missing the ${table} table.`);
+    }
+    return rows.map((row, index) => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        throw new BadRequestException(`Invalid ${table} record at backup row ${index + 1}.`);
+      }
+      const value = this.pick(row as JsonRecord, fields);
+      for (const field of dateFields) {
+        const date = value[field];
+        if (date === undefined || date === null) continue;
+        if (typeof date !== 'string' || Number.isNaN(Date.parse(date))) {
+          throw new BadRequestException(`Invalid ${field} date in ${table} backup row ${index + 1}.`);
+        }
+        value[field] = new Date(date);
+      }
+      return value;
+    });
+  }
+
+  private exceptionMessage(error: HttpException): string {
+    const response = error.getResponse();
+    if (typeof response === 'string') return response;
+    if (response && typeof response === 'object' && 'message' in response) {
+      const message = (response as { message: unknown }).message;
+      return Array.isArray(message) ? message.join('; ') : String(message);
+    }
+    return error.message;
+  }
+
+  private importErrorMessage(error: unknown): string {
+    if (error instanceof HttpException) return this.exceptionMessage(error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      const field = error.meta?.field_name;
+      switch (error.code) {
+        case 'P2002':
+          return 'A record with the same unique value already exists.';
+        case 'P2003':
+          return `A referenced record does not exist${typeof field === 'string' ? ` (${field})` : ''}. Check the linked code or ID.`;
+        case 'P2025':
+          return 'A required related record could not be found.';
+        case 'P2000':
+          return 'A value is too long for its database column.';
+        default:
+          return `Database rejected this row (${error.code}). Check the row values and related records.`;
+      }
+    }
+    if (error instanceof Error) {
+      const firstLine = error.message.split(/\r?\n/, 1)[0].trim();
+      if (firstLine && !firstLine.startsWith('Invalid `')) return firstLine;
+    }
+    return 'Could not save this row due to a database error.';
+  }
+
+  private async loadBillReferences(): Promise<Record<string, Set<string>>> {
+    const [budgetHeads, objectHeads, transfers, users] = await Promise.all([
+      this.prisma.budgetHead.findMany({ select: { code: true } }),
+      this.prisma.objectHead.findMany({ select: { code: true } }),
+      this.prisma.transfer.findMany({ select: { id: true } }),
+      this.prisma.user.findMany({ select: { id: true } }),
+    ]);
+    return {
+      budgetCode: new Set(budgetHeads.map(item => item.code)),
+      objectHead: new Set(objectHeads.map(item => item.code)),
+      transferId: new Set(transfers.map(item => item.id)),
+      assignedUserId: new Set(users.map(item => item.id)),
+    };
+  }
+
+  private validateBillReferences(
+    row: JsonRecord,
+    references: Record<string, Set<string>>,
+  ): void {
+    const referenceLabels: Record<string, string> = {
+      budgetCode: 'budget head',
+      objectHead: 'object head',
+      transferId: 'transfer',
+      assignedUserId: 'assigned user',
+    };
+    for (const [field, label] of Object.entries(referenceLabels)) {
+      const value = row[field];
+      if (value === undefined || value === null || value === '') continue;
+      if (typeof value !== 'string') {
+        throw new BadRequestException(`${field} must be a text code or ID, or left blank.`);
+      }
+      const reference = value.trim();
+      if (!reference) continue;
+      if (!references[field].has(reference)) {
+        throw new BadRequestException(
+          `${field} "${reference}" does not match an existing ${label}. Import that ${label} first or leave the column blank.`,
+        );
+      }
+    }
+  }
+
   private requireString(value: JsonRecord, field: string): string {
     const item = value[field];
     if (typeof item !== 'string' || !item.trim()) {
       throw new BadRequestException(`${field} must be a non-empty string.`);
     }
     return item.trim();
+  }
+
+  private requireUsername(value: JsonRecord): string {
+    const username = this.requireString(value, 'username').toLowerCase();
+    if (!/^[a-z0-9._-]{3,64}$/.test(username)) {
+      throw new BadRequestException('username must be 3–64 characters using letters, numbers, dots, underscores or hyphens.');
+    }
+    return username;
+  }
+
+  private async ensureUsernameAvailable(username: string, exceptId?: string): Promise<void> {
+    const existing = await this.prisma.user.findUnique({
+      where: { username },
+      select: { id: true },
+    });
+    if (existing && existing.id !== exceptId) {
+      throw new BadRequestException('That username is already assigned to another user.');
+    }
   }
 
   private optionalString(value: unknown): string | undefined {

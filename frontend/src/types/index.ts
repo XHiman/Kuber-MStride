@@ -83,7 +83,6 @@ export interface UserProfile {
   name: string;
   programs: string[];
   districts: string[];
-  deviceCount?: number;
   assignedBillCount?: number;
 }
 

@@ -1,7 +1,5 @@
 import {
   Injectable,
-  HttpException,
-  HttpStatus,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -16,17 +14,9 @@ interface AdminSession {
   exp: number;
 }
 
-interface AttemptWindow {
-  count: number;
-  resetAt: number;
-}
-
 @Injectable()
 export class AdminAuthService {
-  private readonly attempts = new Map<string, AttemptWindow>();
-
-  login(username: string, password: string, ipAddress: string): string {
-    this.checkRateLimit(ipAddress);
+  login(username: string, password: string): string {
     const configuredPassword = process.env.ADMIN_PASSWORD;
     const sessionSecret = process.env.ADMIN_SESSION_SECRET;
     if (!configuredPassword || !sessionSecret || sessionSecret.length < 32) {
@@ -39,7 +29,6 @@ export class AdminAuthService {
       throw new UnauthorizedException('Invalid admin credentials.');
     }
 
-    this.attempts.delete(ipAddress);
     const now = Math.floor(Date.now() / 1000);
     const payload = this.encode({ sub: ADMIN_USERNAME, exp: now + SESSION_LIFETIME_SECONDS });
     return `${payload}.${this.sign(payload, sessionSecret)}`;
@@ -93,19 +82,6 @@ export class AdminAuthService {
       'Max-Age=0',
       ...(secure ? ['Secure'] : []),
     ].join('; ');
-  }
-
-  private checkRateLimit(ipAddress: string): void {
-    const now = Date.now();
-    const current = this.attempts.get(ipAddress);
-    if (!current || current.resetAt <= now) {
-      this.attempts.set(ipAddress, { count: 1, resetAt: now + 15 * 60 * 1000 });
-      return;
-    }
-    current.count += 1;
-    if (current.count > 10) {
-      throw new HttpException('Too many admin login attempts. Try again later.', HttpStatus.TOO_MANY_REQUESTS);
-    }
   }
 
   private encode(value: AdminSession): string {

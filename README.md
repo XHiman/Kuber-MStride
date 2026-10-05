@@ -34,11 +34,11 @@ The interface supports **light and dark appearance** and **English and Marathi U
 | **Bills pipeline** | Track six clearance checkpoints, search and filter the register, select or enter a Vendor/DSU as a Program or District, assign bills to a person, review aging and exceptions, and copy or download the register. |
 | **Budget by FY** | Review provisions, expenditure and balance by object code across FY 2024-25–2029-30, or use the read-only **FY Total** view. Search globally and use the compact mobile budget cards. |
 | **Fund transfers** | Select or enter recipients as Programs or Districts, reuse their most frequent purpose/object code, and audit transfer changes and utilization history. |
-| **Dashboard** | Name a browser device and see personal bill and district work. User/device records and program/district scopes are maintained on the backend, not exposed as a user-facing tab. |
+| **Dashboard** | Sign in with an administrator-provisioned account to see personal bill and district work. |
 
 The global search bar searches bills, budgets, transfers, districts and people from any tab. Exports first copy the full CSV-formatted table to the clipboard; a CSV download action appears after a successful copy.
 
-Device profiles use a persistent browser identifier and record the request IP address and user-agent for recognition. The name prompt can be dismissed. A developer can correct `user_devices.ipAddress`, remap a device through `user_devices.userId`, and maintain user program/district scopes in the backend database; there is no separate administrator login in this application.
+Bills, budgets, transfers and search are available without signing in. Only the personal dashboard requires a user account. Administrators create each user's username and password and maintain their program/district scopes in the admin panel. Passwords are stored as scrypt hashes; dashboard sessions expire after eight hours and are kept in the current browser tab only.
 
 ## Built with
 
@@ -96,7 +96,9 @@ Legacy seed/import files are disabled in production and their package scripts ha
 
 ### Admin panel
 
-Open `/adminX` to sign in and manage bills, budgets, budget heads, object heads, transfers, districts, users and browser devices. The panel uses an expiring, tab-scoped signed session so authentication works when the static frontend and API are hosted on separate origins. For local development, copy `backend/.env.example` to `backend/.env` and replace the placeholder values with a new password and a random `ADMIN_SESSION_SECRET` of at least 32 characters. The backend loads this file on startup; it is git-ignored. In production, configure the admin values as server-only deployment secrets. Never place credentials in frontend variables or source control. Rotate any password previously shared in chat before deployment. Unnamed devices can view tracker records; saving a device name enables editing unless an administrator has disabled that device. Existing device access is preserved by the additive access-control migration.
+Open `/adminX` to sign in and manage bills, budgets, budget heads, object heads, transfers, districts and user accounts. The panel uses an expiring, tab-scoped signed session so authentication works when the static frontend and API are hosted on separate origins. For local development, copy `backend/.env.example` to `backend/.env` and replace the placeholder values with a new password and a random `ADMIN_SESSION_SECRET` of at least 32 characters. The backend loads this file on startup; it is git-ignored. In production, configure the admin values as server-only deployment secrets. Never place credentials in frontend variables or source control. Rotate any password previously shared in chat before deployment. Set each dashboard user's unique username and an initial password of at least 10 characters in their admin user record; set a new password on that record to reset it.
+
+The admin panel can import additive rows from `.xlsx` or `.csv` files for bills, budgets, budget heads, object heads, transfers, districts and users. Download a CSV template to get the exact column names. User imports require a unique username and password. For bills, any populated `budgetCode`, `objectHead`, `transferId` or `assignedUserId` must match an existing record; import the referenced tables first or leave optional reference cells blank. Rows are checked independently, and the admin reports specific row errors with a downloadable CSV report; importing does not update or deduplicate existing records. The **Download whole database** action exports every table, including transfer history and user password hashes, to a versioned JSON backup. Keep this file private. **Replace database from backup** restores that file atomically and replaces all current records; take a fresh backup first. Restore works against the current schema and ignores fields no longer recognized by the running version.
 
 ## Repository map
 
@@ -107,7 +109,7 @@ backend/
   src/budget/             Fiscal-year budget and totals
   src/transfers/          Transfer records and budget accounting
   src/districts/          District Incentive Fund records
-  src/users/               Device profiles and personal dashboard scopes
+  src/users/               User sign-in and personal dashboard scopes
   src/search/              Cross-entity global search
   src/common/             Shared fiscal-year and bill utilities
 frontend/
@@ -142,10 +144,9 @@ The frontend communicates with the NestJS API. Common routes include:
 | `PUT`, `DELETE` | `/transfers/:id` | Update or remove a transfer |
 | `GET` | `/search?q=…` | Search bills, budgets, transfers, districts and users |
 | `GET` | `/users` | List named users |
-| `POST` | `/users/device` | Record a browser device, request IP and user-agent |
-| `POST` | `/users/claim` | Assign a name to the current browser device |
-| `GET` | `/users/dashboard/:id` | Read the selected user's scoped bills and district records |
-| `PUT` | `/users/:id` | Update a user's program and district scope |
+| `POST` | `/users/login` | Sign in to the personal dashboard |
+| `GET` | `/users/session` | Read the signed-in user's profile |
+| `GET` | `/users/dashboard` | Read the signed-in user's scoped bills and district records |
 | `GET`, `POST` | `/districts` | District summary or create a district record |
 | `GET` | `/districts/records` | List district records |
 | `PUT` | `/districts/:id` | Update a district record |

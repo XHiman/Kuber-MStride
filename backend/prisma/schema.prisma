@@ -100,30 +100,17 @@ model Transfer {
 }
 
 model User {
-  id        String       @id @default(cuid())
-  name      String
-  programs  String       @default("[]")
-  districts String       @default("[]")
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  devices   UserDevice[]
-  bills     Bill[]
+  id           String   @id @default(cuid())
+  username     String?  @unique
+  passwordHash String?
+  name         String
+  programs     String   @default("[]")
+  districts    String   @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  bills        Bill[]
 
   @@map("users")
-}
-
-model UserDevice {
-  id         String   @id @default(cuid())
-  deviceId   String   @unique
-  ipAddress  String?
-  userAgent  String
-  accessEnabled Boolean @default(true)
-  lastSeenAt DateTime @default(now())
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@map("user_devices")
 }
 
 model TransferHistory {
