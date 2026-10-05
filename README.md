@@ -76,15 +76,15 @@ npm run build
 
 Local development uses `backend/prisma/dev.db` via `DATABASE_URL=file:./dev.db`. This repository does not seed, reset, or import records during builds or deployments.
 
-**Production SQLite must live on a persistent disk, never in the deployed repository.** Before the next Render deploy, attach a persistent disk mounted at `/var/data`, copy the active production SQLite file to `/var/data/mitra.db` without overwriting it from the repository, and set `DATABASE_URL=file:/var/data/mitra.db` plus `DATABASE_PERSISTENT_DIR=/var/data`. The backend refuses to start if the configured production database is outside the persistent mount or missing; it will not silently create a new empty database after a deploy. Keep builds limited to `npm install && npm run build`; migrations, if needed, are separate, reviewed schema-only commands and must target the same persistent `DATABASE_URL`. Do not use seed, reset, or import commands in production.
+**Production SQLite must live on a persistent disk, never in the deployed repository.** Before the next Render deploy, attach a persistent disk mounted at `/var/data`, copy the active production SQLite file to `/var/data/mitra.db` without overwriting it from the repository, and set `DATABASE_URL=file:/var/data/mitra.db` plus `DATABASE_PERSISTENT_DIR=/var/data`. The backend refuses to start if the configured production database is outside the persistent mount or missing; it will not silently create a new empty database after a deploy. Keep builds limited to `npm install && npm run build`. The production start script runs `prisma migrate deploy` against `DATABASE_URL` before starting the API, so migrations must remain reviewed, additive/schema-only operations. Do not use seed, reset, or import commands in production.
 
-For a hosted deployment, configure the pre-deploy step to apply pending schema migrations only:
+If your hosting plan supports a pre-deploy command, it may apply pending schema migrations before the new version is started:
 
 ```bash
 npm run db:migrate:deploy
 ```
 
-Apply pending migrations to the persistent production database before deploying frontend code that depends on the new schema. The budget-release migration adds `rel215`, `rel224`, and `rel233` with zero defaults, preserving existing budget rows.
+The production start command also applies pending migrations automatically. The budget-release migration adds `rel215`, `rel224`, and `rel233` with zero defaults, preserving existing budget rows.
 
 Keep the hosting build command as:
 
