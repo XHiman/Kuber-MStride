@@ -41,10 +41,13 @@ export interface BudgetRow {
   name: string;
   nameMr: string;
   prov215: number;
+  rel215: number;
   exp215: number;
   prov224: number;
+  rel224: number;
   exp224: number;
   prov233: number;
+  rel233: number;
   exp233: number;
   objectHead: {
     code: string;

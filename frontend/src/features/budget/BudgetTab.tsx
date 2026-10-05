@@ -14,6 +14,7 @@ export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnl
   const [fiscalYear, setFiscalYear] = useState('FY 2026-27');
   const [pendingEdits, setPendingEdits] = useState<Map<string, Partial<BudgetRow>>>(new Map());
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => { load(); }, [fiscalYear]);
   useEffect(() => {
@@ -61,45 +62,57 @@ export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnl
       Code: r.code,
       'Object head': r.name,
       '215_Provision': r.prov215,
+      '215_Release': r.rel215,
       '215_Expenditure': r.exp215,
-      '215_Balance': (r.prov215 || 0) - (r.exp215 || 0),
+      '215_Balance': (r.rel215 || 0) - (r.exp215 || 0),
       '224_Provision': r.prov224,
+      '224_Release': r.rel224,
       '224_Expenditure': r.exp224,
-      '224_Balance': (r.prov224 || 0) - (r.exp224 || 0),
+      '224_Balance': (r.rel224 || 0) - (r.exp224 || 0),
       '233_Provision': r.prov233,
+      '233_Release': r.rel233,
       '233_Expenditure': r.exp233,
-      '233_Balance': (r.prov233 || 0) - (r.exp233 || 0),
+      '233_Balance': (r.rel233 || 0) - (r.exp233 || 0),
       'Total_Provision': (r.prov215 || 0) + (r.prov224 || 0) + (r.prov233 || 0),
+      'Total_Release': (r.rel215 || 0) + (r.rel224 || 0) + (r.rel233 || 0),
       'Total_Expenditure': (r.exp215 || 0) + (r.exp224 || 0) + (r.exp233 || 0),
-      'Total_Balance': (r.prov215 || 0) + (r.prov224 || 0) + (r.prov233 || 0) - (r.exp215 || 0) - (r.exp224 || 0) - (r.exp233 || 0),
+      'Total_Balance': (r.rel215 || 0) + (r.rel224 || 0) + (r.rel233 || 0) - (r.exp215 || 0) - (r.exp224 || 0) - (r.exp233 || 0),
     }));
   }
 
   const totals = effectiveRows.reduce((acc, r) => ({
     prov215: acc.prov215 + (r.prov215 || 0),
     exp215: acc.exp215 + (r.exp215 || 0),
+    rel215: acc.rel215 + (r.rel215 || 0),
     prov224: acc.prov224 + (r.prov224 || 0),
     exp224: acc.exp224 + (r.exp224 || 0),
+    rel224: acc.rel224 + (r.rel224 || 0),
     prov233: acc.prov233 + (r.prov233 || 0),
     exp233: acc.exp233 + (r.exp233 || 0),
-  }), { prov215: 0, exp215: 0, prov224: 0, exp224: 0, prov233: 0, exp233: 0 });
+    rel233: acc.rel233 + (r.rel233 || 0),
+  }), { prov215: 0, exp215: 0, rel215: 0, prov224: 0, exp224: 0, rel224: 0, prov233: 0, exp233: 0, rel233: 0 });
   const grandProv = totals.prov215 + totals.prov224 + totals.prov233;
+  const grandRelease = totals.rel215 + totals.rel224 + totals.rel233;
   const grandExp = totals.exp215 + totals.exp224 + totals.exp233;
-  const grandBal = grandProv - grandExp;
+  const grandBal = grandRelease - grandExp;
 
   type EditableBudgetField =
   | 'prov215'
   | 'exp215'
+  | 'rel215'
   | 'prov224'
   | 'exp224'
+  | 'rel224'
   | 'prov233'
-  | 'exp233';
+  | 'exp233'
+  | 'rel233';
 
 function handleEdit(
   code: string,
   field: EditableBudgetField,
   value: number,
 ) {
+  setSaveError('');
   setPendingEdits(prev => {
     const copy = new Map(prev);
     const existing = copy.get(code) || {};
@@ -111,18 +124,22 @@ function handleEdit(
 async function handleSave() {
   if (pendingEdits.size === 0) return;
   setSaving(true);
+  setSaveError('');
   try {
     for (const [code, edits] of pendingEdits) {
       await apiClient.budget.update(fiscalYear, code, edits);
     }
     await load();
     setPendingEdits(new Map());
+  } catch (error) {
+    setSaveError(error instanceof Error ? error.message : 'Could not save budget changes.');
   } finally {
     setSaving(false);
   }
 }
 
 function handleUndo() {
+  setSaveError('');
   setPendingEdits(new Map());
 }
 
@@ -136,6 +153,9 @@ function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
     exp224: 'A224 Expenditure',
     prov233: 'A233 Provision',
     exp233: 'A233 Expenditure',
+    rel233: 'A233 Release',
+    rel224: 'A224 Release',
+    rel215: 'A215 Release',
   };
   return (
     <td
@@ -171,11 +191,11 @@ function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
       <div className="stats" style={{whiteSpace: 'pre-line'}}>
         {[
           { lbl: `${t('Total approved budget')}\n(${fiscalYear})`, val: fmtShort(grandProv), sub: '3451-A215 + A224 + A233' },
-          { lbl: 'Total expenditure to date\n\n', val: fmtShort(grandExp), sub: `${pct(grandExp, grandProv)}% ${t('utilized')}` },
+          { lbl: 'Total expenditure to date\n\n', val: fmtShort(grandExp), sub: `${pct(grandExp, grandRelease)}% ${t('utilized')}` },
           { lbl: `A215 -\n${headLabel('A215','PMU establishment')}`, val: fmtShort(totals.prov215), sub: `${fmtShort(totals.exp215)} ${t('spent')} · ${pct(totals.exp215, totals.prov215)}%` },
           { lbl: `A224 -\n${headLabel('A224', 'IPF (World Bank)')}`, val: fmtShort(totals.prov224), sub: `${fmtShort(totals.exp224)} ${t('spent')} · ${pct(totals.exp224, totals.prov224)}%` },
           { lbl: `A233 -\n${headLabel('A233', 'PforR (state share)')}`, val: fmtShort(totals.prov233), sub: `${fmtShort(totals.exp233)} ${t('spent')} · ${pct(totals.exp233, totals.prov233)}%` },
-          { lbl: 'Balance remaining\n\n', val: fmtShort(grandProv - grandExp), sub: `${pct(grandProv - grandExp, grandProv)}% ${t('of budget')}` },
+          { lbl: 'Balance remaining\n\n', val: fmtShort(grandBal), sub: `${pct(grandBal, grandRelease)}% ${t('of release')}` },
         ].map((s, i) => (
           <div key={i} className="stat">
             <div className="lbl">{t(s.lbl)}</div>
@@ -213,52 +233,59 @@ function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
             <ExportActions getRows={getExportRows} filename={`budget-${fiscalYear}`} />
           </div>
         </div>
+        {saveError && <p className="admin-error" role="alert">{saveError} {t('Your edits are still pending; correct the issue and retry.')}</p>}
         <div className="table-scroll">
           <table className="budget-responsive-table">
             <thead>
               <tr>
                 <th>{t('Code')}</th><th>{t('Object head')}</th>
-                <th className="num budget-group-start">215 {t('Provision')}</th><th className="num">215 {t('Expenditure')}</th><th className="num">215 {t('Balance')}</th>
-                <th className="num budget-group-start">224 {t('Provision')}</th><th className="num">224 {t('Expenditure')}</th><th className="num">224 {t('Balance')}</th>
-                <th className="num budget-group-start">233 {t('Provision')}</th><th className="num">233 {t('Expenditure')}</th><th className="num">233 {t('Balance')}</th>
-                <th className="num budget-group-start">{t('Total provision')}</th><th className="num">{t('Total expenditure')}</th><th className="num">{t('Total balance')}</th>
+                <th className="num budget-group-start">215 {t('Provision')}</th><th className="num">215 {t('Release')}</th><th className="num">215 {t('Expenditure')}</th><th className="num">215 {t('Balance')}</th>
+                <th className="num budget-group-start">224 {t('Provision')}</th><th className="num">224 {t('Release')}</th><th className="num">224 {t('Expenditure')}</th><th className="num">224 {t('Balance')}</th>
+                <th className="num budget-group-start">233 {t('Provision')}</th><th className="num">233 {t('Release')}</th><th className="num">233 {t('Expenditure')}</th><th className="num">233 {t('Balance')}</th>
+                <th className="num budget-group-start">{t('Total provision')}</th><th className="num">{t('Total release')}</th><th className="num">{t('Total expenditure')}</th><th className="num">{t('Total balance')}</th>
               </tr>
             </thead>
             <tbody>
               {BUDGET_CODE_ORDER.map(code => {
                 const r = rowsByCode.get(code);
                 if (!r) return null;
-                const bal215 = (r.prov215 || 0) - (r.exp215 || 0);
-                const bal224 = (r.prov224 || 0) - (r.exp224 || 0);
-                const bal233 = (r.prov233 || 0) - (r.exp233 || 0);
+                const bal215 = (r.rel215 || 0) - (r.exp215 || 0);
+                const bal224 = (r.rel224 || 0) - (r.exp224 || 0);
+                const bal233 = (r.rel233 || 0) - (r.exp233 || 0);
                 const totProv = (r.prov215 || 0) + (r.prov224 || 0) + (r.prov233 || 0);
+                const totRel = (r.rel215 || 0) + (r.rel224 || 0) + (r.rel233 || 0);
                 const totExp = (r.exp215 || 0) + (r.exp224 || 0) + (r.exp233 || 0);
-                const totals = (totProv || 0) - (totExp || 0);
+                const rowBalance = totRel - totExp;
                 return (
                   <tr key={r.code}>
                     <td className="mono" data-label={t('Code')}>{r.code}</td>
                     <td data-label={t('Object head')}>{r.objectHead.name}<br /><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{r.objectHead.nameMr}</span></td>
-                    {cell(r, 'prov215', true)}{cell(r, 'exp215')}<td className="num mono" data-label={t('A215 Balance')}>{fmtIN(bal215)}</td>
-                    {cell(r, 'prov224', true)}{cell(r, 'exp224')}<td className="num mono" data-label={t('A224 Balance')}>{fmtIN(bal224)}</td>
-                    {cell(r, 'prov233', true)}{cell(r, 'exp233')}<td className="num mono" data-label={t('A233 Balance')}>{fmtIN(bal233)}</td>
+                    {cell(r, 'prov215', true)}{cell(r, 'rel215')}{cell(r, 'exp215')}<td className="num mono" data-label={t('A215 Balance')}>{fmtIN(bal215)}</td>
+                    {cell(r, 'prov224', true)}{cell(r, 'rel224')}{cell(r, 'exp224')}<td className="num mono" data-label={t('A224 Balance')}>{fmtIN(bal224)}</td>
+                    {cell(r, 'prov233', true)}{cell(r, 'rel233')}{cell(r, 'exp233')}<td className="num mono" data-label={t('A233 Balance')}>{fmtIN(bal233)}</td>
                     <td className="num amt-cell mono budget-group-start" data-label={t('Total provision')}>{fmtIN(totProv)}</td>
+                    <td className="num amt-cell mono" data-label={t('Total release')}>{fmtIN(totRel)}</td>
                     <td className="num amt-cell mono" data-label={t('Total expenditure')}>{fmtIN(totExp)}</td>
-                    <td className="num amt-cell mono" data-label={t('Total balance')}>{fmtIN(totals)}</td>
+                    <td className="num amt-cell mono" data-label={t('Total balance')}>{fmtIN(rowBalance)}</td>
                   </tr>
                 );
               })}
               <tr className="tot-row budget-total-row">
                 <td data-label={t('Code')}></td><td data-label={t('Object head')}>{t('Total')}</td>
                 <td className="num mono budget-group-start" data-label={t('A215 Provision')}>{fmtIN(totals.prov215)}</td>
+                <td className="num mono" data-label={t('A215 Release')}>{fmtIN(totals.rel215)}</td>
                 <td className="num mono" data-label={t('A215 Expenditure')}>{fmtIN(totals.exp215)}</td>
-                <td className="num mono" data-label={t('A215 Balance')}>{fmtIN(totals.prov215 - totals.exp215)}</td>
+                <td className="num mono" data-label={t('A215 Balance')}>{fmtIN(totals.rel215 - totals.exp215)}</td>
                 <td className="num mono budget-group-start" data-label={t('A224 Provision')}>{fmtIN(totals.prov224)}</td>
+                <td className="num mono" data-label={t('A224 Release')}>{fmtIN(totals.rel224)}</td>
                 <td className="num mono" data-label={t('A224 Expenditure')}>{fmtIN(totals.exp224)}</td>
-                <td className="num mono" data-label={t('A224 Balance')}>{fmtIN(totals.prov224 - totals.exp224)}</td>
+                <td className="num mono" data-label={t('A224 Balance')}>{fmtIN(totals.rel224 - totals.exp224)}</td>
                 <td className="num mono budget-group-start" data-label={t('A233 Provision')}>{fmtIN(totals.prov233)}</td>
+                <td className="num mono" data-label={t('A233 Release')}>{fmtIN(totals.rel233)}</td>
                 <td className="num mono" data-label={t('A233 Expenditure')}>{fmtIN(totals.exp233)}</td>
-                <td className="num mono" data-label={t('A233 Balance')}>{fmtIN(totals.prov233 - totals.exp233)}</td>
+                <td className="num mono" data-label={t('A233 Balance')}>{fmtIN(totals.rel233 - totals.exp233)}</td>
                 <td className="num mono budget-group-start" data-label={t('Total provision')}>{fmtIN(grandProv)}</td>
+                <td className="num mono" data-label={t('Total release')}>{fmtIN(grandRelease)}</td>
                 <td className="num mono" data-label={t('Total expenditure')}>{fmtIN(grandExp)}</td>
                 <td className="num mono" data-label={t('Total balance')}>{fmtIN(grandBal)}</td>
               </tr>

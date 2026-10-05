@@ -40,6 +40,7 @@ export class AdminService {
 
   async importRows(entity: AdminEntity, rows: unknown): Promise<{
     imported: number;
+    updated: number;
     failed: { row: number; error: string }[];
   }> {
     if (!['bills', 'budgets', 'budgetHeads', 'objectHeads', 'transfers', 'districts', 'users'].includes(entity)) {
@@ -54,6 +55,7 @@ export class AdminService {
 
     const billReferences = entity === 'bills' ? await this.loadBillReferences() : null;
     let imported = 0;
+    let updated = 0;
     const failed: { row: number; error: string }[] = [];
     for (const [index, row] of rows.entries()) {
       if (!row || typeof row !== 'object' || Array.isArray(row)) {
@@ -66,13 +68,19 @@ export class AdminService {
         : index + 2;
       try {
         if (billReferences) this.validateBillReferences(row as JsonRecord, billReferences);
-        await this.create(entity, row as JsonRecord);
-        imported += 1;
+        if (entity === 'budgets') {
+          const result = await this.importBudgetRow(row as JsonRecord);
+          if (result === 'updated') updated += 1;
+          else imported += 1;
+        } else {
+          await this.create(entity, row as JsonRecord);
+          imported += 1;
+        }
       } catch (error) {
         failed.push({ row: rowNumber, error: this.importErrorMessage(error) });
       }
     }
-    return { imported, failed };
+    return { imported, updated, failed };
   }
 
   async createBackup() {
@@ -116,7 +124,8 @@ export class AdminService {
         'id', 'username', 'passwordHash', 'name', 'programs', 'districts', 'createdAt', 'updatedAt',
       ], ['createdAt', 'updatedAt']),
       budgets: this.backupRows(tables, 'budgets', [
-        'id', 'code', 'fiscalYear', 'name', 'nameMr', 'prov215', 'exp215', 'prov224', 'exp224', 'prov233', 'exp233',
+        'id', 'code', 'fiscalYear', 'name', 'nameMr',
+        'prov215', 'rel215', 'exp215', 'prov224', 'rel224', 'exp224', 'prov233', 'rel233', 'exp233',
       ]),
       transfers: this.backupRows(tables, 'transfers', [
         'id', 'recipient', 'scopeType', 'purpose', 'objectCode', 'amount', 'fiscalYear', 'budgetCode',
@@ -232,10 +241,10 @@ export class AdminService {
       case 'budgets': {
         const value = this.pick(input, [
           'id', 'code', 'fiscalYear', 'name', 'nameMr',
-          'prov215', 'exp215', 'prov224', 'exp224', 'prov233', 'exp233',
+          'prov215', 'rel215', 'exp215', 'prov224', 'rel224', 'exp224', 'prov233', 'rel233', 'exp233',
         ]);
         const code = this.requireString(value, 'code');
-        const fiscalYear = this.optionalString(value.fiscalYear) ?? 'FY 2026-27';
+        const fiscalYear = this.optionalString(value.fiscalYear)?.trim() || 'FY 2026-27';
         return this.prisma.budget.create({
           data: {
             id: this.optionalString(value.id) ?? `${fiscalYear}:${code}`,
@@ -244,10 +253,13 @@ export class AdminService {
             name: this.requireString(value, 'name'),
             nameMr: this.optionalString(value.nameMr) ?? '',
             prov215: this.optionalNumber(value.prov215) ?? 0,
+            rel215: this.optionalNumber(value.rel215) ?? 0,
             exp215: this.optionalNumber(value.exp215) ?? 0,
             prov224: this.optionalNumber(value.prov224) ?? 0,
+            rel224: this.optionalNumber(value.rel224) ?? 0,
             exp224: this.optionalNumber(value.exp224) ?? 0,
             prov233: this.optionalNumber(value.prov233) ?? 0,
+            rel233: this.optionalNumber(value.rel233) ?? 0,
             exp233: this.optionalNumber(value.exp233) ?? 0,
           },
         });
@@ -330,10 +342,13 @@ export class AdminService {
       }
       case 'budgets': {
         const value = this.pick(input, [
-          'name', 'nameMr', 'prov215', 'exp215', 'prov224', 'exp224', 'prov233', 'exp233',
+          'name', 'nameMr',
+          'prov215', 'rel215', 'exp215', 'prov224', 'rel224', 'exp224', 'prov233', 'rel233', 'exp233',
         ]);
         this.validateOptionalStringFields(value, ['name', 'nameMr']);
-        this.validateOptionalNumberFields(value, ['prov215', 'exp215', 'prov224', 'exp224', 'prov233', 'exp233']);
+        this.validateOptionalNumberFields(value, [
+          'prov215', 'rel215', 'exp215', 'prov224', 'rel224', 'exp224', 'prov233', 'rel233', 'exp233',
+        ]);
         return this.prisma.budget.update({
           where: { id },
           data: value as Prisma.BudgetUpdateInput,
@@ -414,6 +429,56 @@ export class AdminService {
       case 'users':
         return this.prisma.user.delete({ where: { id } });
     }
+  }
+
+  private async importBudgetRow(input: JsonRecord): Promise<'imported' | 'updated'> {
+    const value = this.pick(input, [
+      'id', 'code', 'fiscalYear', 'name', 'nameMr',
+      'prov215', 'rel215', 'exp215', 'prov224', 'rel224', 'exp224', 'prov233', 'rel233', 'exp233',
+    ]);
+    const code = this.requireString(value, 'code');
+    const fiscalYear = this.optionalString(value.fiscalYear) ?? 'FY 2026-27';
+    const where = { fiscalYear_code: { fiscalYear, code } };
+    const numericFields = [
+      'prov215', 'rel215', 'exp215', 'prov224', 'rel224', 'exp224', 'prov233', 'rel233', 'exp233',
+    ] as const;
+    this.validateOptionalStringFields(value, ['name', 'nameMr']);
+    this.validateOptionalNumberFields(value, [...numericFields]);
+
+    const update: Prisma.BudgetUpdateInput = {};
+    const name = this.optionalString(value.name);
+    const nameMr = this.optionalString(value.nameMr);
+    if (name) update.name = name;
+    if (nameMr) update.nameMr = nameMr;
+    for (const field of numericFields) {
+      const number = this.optionalNumber(value[field]);
+      if (number !== undefined) update[field] = number;
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.budget.findUnique({ where });
+      await tx.budget.upsert({
+        where,
+        create: {
+          id: (existing?.id ?? this.optionalString(value.id)) || `${fiscalYear}:${code}`,
+          code,
+          fiscalYear,
+          name: name?.trim() ? name : existing?.name ?? this.requireString(value, 'name'),
+          nameMr: nameMr?.trim() ? nameMr : existing?.nameMr ?? '',
+          prov215: this.optionalNumber(value.prov215) ?? existing?.prov215 ?? 0,
+          rel215: this.optionalNumber(value.rel215) ?? existing?.rel215 ?? 0,
+          exp215: this.optionalNumber(value.exp215) ?? existing?.exp215 ?? 0,
+          prov224: this.optionalNumber(value.prov224) ?? existing?.prov224 ?? 0,
+          rel224: this.optionalNumber(value.rel224) ?? existing?.rel224 ?? 0,
+          exp224: this.optionalNumber(value.exp224) ?? existing?.exp224 ?? 0,
+          prov233: this.optionalNumber(value.prov233) ?? existing?.prov233 ?? 0,
+          rel233: this.optionalNumber(value.rel233) ?? existing?.rel233 ?? 0,
+          exp233: this.optionalNumber(value.exp233) ?? existing?.exp233 ?? 0,
+        },
+        update,
+      });
+      return existing ? 'updated' : 'imported';
+    });
   }
 
   private transferInput(input: JsonRecord): TransferInput;

@@ -11,10 +11,13 @@ export interface BudgetRow {
   name: string;
   nameMr: string;
   prov215: number;
+  rel215: number;
   exp215: number;
   prov224: number;
+  rel224: number;
   exp224: number;
   prov233: number;
+  rel233: number;
   exp233: number;
   objectHead: {
     code: string;
@@ -40,16 +43,26 @@ export class BudgetService {
       name: r.name,
       nameMr: r.nameMr,
       prov215: r.prov215,
+      rel215: r.rel215,
       exp215: r.exp215,
       prov224: r.prov224,
+      rel224: r.rel224,
       exp224: r.exp224,
       prov233: r.prov233,
+      rel233: r.rel233,
       exp233: r.exp233,
       objectHead: r.objectHead,
     }));
   }
 
-  async update(fiscalYear: string, code: string, data: Partial<Pick<BudgetRow, 'exp215' | 'exp224' | 'exp233'>>) {
+  async update(
+    fiscalYear: string,
+    code: string,
+    data: Partial<Pick<
+      BudgetRow,
+      'prov215' | 'rel215' | 'exp215' | 'prov224' | 'rel224' | 'exp224' | 'prov233' | 'rel233' | 'exp233'
+    >>,
+  ) {
     return this.prisma.budget.update({
       where: { fiscalYear_code: { fiscalYear, code } },
       data,
@@ -68,14 +81,22 @@ export class BudgetService {
     ]);
     const totals = rows.reduce((acc, r) => ({
       prov215: acc.prov215 + r.prov215,
+      rel215: acc.rel215 + r.rel215,
       exp215: acc.exp215 + r.exp215,
       prov224: acc.prov224 + r.prov224,
+      rel224: acc.rel224 + r.rel224,
       exp224: acc.exp224 + r.exp224,
       prov233: acc.prov233 + r.prov233,
+      rel233: acc.rel233 + r.rel233,
       exp233: acc.exp233 + r.exp233,
-    }), { prov215: 0, exp215: 0, prov224: 0, exp224: 0, prov233: 0, exp233: 0 });
+    }), {
+      prov215: 0, rel215: 0, exp215: 0,
+      prov224: 0, rel224: 0, exp224: 0,
+      prov233: 0, rel233: 0, exp233: 0,
+    });
 
     const grandProv = totals.prov215 + totals.prov224 + totals.prov233;
+    const grandRelease = totals.rel215 + totals.rel224 + totals.rel233;
     const grandExp = totals.exp215 + totals.exp224 + totals.exp233;
     const bills = await this.prisma.bill.findMany({
       select: { cat: true, amount: true, clearedFY: true, date: true },
@@ -97,9 +118,10 @@ export class BudgetService {
       budgetHeads,
       totals,
       grandProv,
+      grandRelease,
       grandExp,
-      balance: grandProv - grandExp,
-      utilizationPct: pct(grandExp, grandProv),
+      balance: grandRelease - grandExp,
+      utilizationPct: pct(grandExp, grandRelease),
       fyCrossCheck: {
         clearedFYAmt,
         clearedFYCount: cleared.filter((bill) => fiscalYear === TOTAL_FISCAL_YEAR || (bill.clearedFY || clearedFYOf(bill.date)) === fiscalYear).length,
@@ -128,18 +150,24 @@ export class BudgetService {
         name: row.name,
         nameMr: row.nameMr,
         prov215: 0,
+        rel215: 0,
         exp215: 0,
         prov224: 0,
+        rel224: 0,
         exp224: 0,
         prov233: 0,
+        rel233: 0,
         exp233: 0,
         objectHead: row.objectHead,
       };
       total.prov215 += row.prov215;
+      total.rel215 += row.rel215;
       total.exp215 += row.exp215;
       total.prov224 += row.prov224;
+      total.rel224 += row.rel224;
       total.exp224 += row.exp224;
       total.prov233 += row.prov233;
+      total.rel233 += row.rel233;
       total.exp233 += row.exp233;
       totals.set(row.code, total);
     }

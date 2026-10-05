@@ -19,7 +19,7 @@ const IMPORT_ENTITIES: { id: ImportEntity; label: string }[] = [
 ];
 const IMPORT_FIELDS: Record<ImportEntity, string[]> = {
   bills: ['sr', 'vendor', 'invoice', 'date', 'amount', 'budgetCode', 'objectHead', 'transferId', 'program', 'district', 'assignedUserId', 'bucket', 'cat', 'status', 'attribute', 'note', 'days', 'clearedFY', 'source'],
-  budgets: ['id', 'code', 'fiscalYear', 'name', 'nameMr', 'prov215', 'exp215', 'prov224', 'exp224', 'prov233', 'exp233'],
+  budgets: ['id', 'code', 'fiscalYear', 'name', 'nameMr', 'prov215', 'rel215', 'exp215', 'prov224', 'rel224', 'exp224', 'prov233', 'rel233', 'exp233'],
   budgetHeads: ['code', 'name', 'description'],
   objectHeads: ['code', 'name', 'nameMr'],
   transfers: ['recipient', 'scopeType', 'purpose', 'objectCode', 'amount', 'fiscalYear', 'budgetCode', 'orderDate', 'status', 'utilized', 'remarks'],
@@ -28,7 +28,7 @@ const IMPORT_FIELDS: Record<ImportEntity, string[]> = {
 };
 const NUMERIC_FIELDS: Partial<Record<ImportEntity, string[]>> = {
   bills: ['sr', 'amount', 'days'],
-  budgets: ['prov215', 'exp215', 'prov224', 'exp224', 'prov233', 'exp233'],
+  budgets: ['prov215', 'rel215', 'exp215', 'prov224', 'rel224', 'exp224', 'prov233', 'rel233', 'exp233'],
   transfers: ['amount', 'utilized'],
   districts: ['amount'],
 };
@@ -429,17 +429,21 @@ export default function AdminApp() {
     setImportFailures([]);
     try {
       const rows = await parseSpreadsheet(importFile, importEntity);
-      if (!window.confirm(`Import ${rows.length} rows into ${IMPORT_ENTITIES.find(item => item.id === importEntity)?.label}? This adds records; it does not update existing ones.`)) {
+      const importAction = importEntity === 'budgets'
+        ? 'Matching fiscal year + code rows will be updated; unmatched rows will be added. Blank cells keep existing values.'
+        : 'This adds records; it does not update existing ones.';
+      if (!window.confirm(`Import ${rows.length} rows into ${IMPORT_ENTITIES.find(item => item.id === importEntity)?.label}? ${importAction}`)) {
         return;
       }
-      const result = await adminRequest<{ imported: number; failed: ImportFailure[] }>(
+      const result = await adminRequest<{ imported: number; updated?: number; failed: ImportFailure[] }>(
         `/import/${importEntity}`,
         { method: 'POST', body: JSON.stringify({ rows }) },
       );
+      const updated = result.updated ?? 0;
       setNotice(
         result.failed.length
-          ? `Imported ${result.imported} of ${rows.length} rows; ${result.failed.length} need correction.`
-          : `Imported all ${result.imported} rows successfully.`,
+          ? `Added ${result.imported}, updated ${updated} of ${rows.length} rows; ${result.failed.length} need correction.`
+          : `Added ${result.imported} and updated ${updated} rows successfully.`,
       );
       setImportFailures(result.failed);
       setImportFile(null);

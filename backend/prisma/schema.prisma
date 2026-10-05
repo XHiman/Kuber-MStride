@@ -46,10 +46,13 @@ model Budget {
   name       String
   nameMr     String
   prov215    Float      @default(0)
+  rel215     Float      @default(0)
   exp215     Float      @default(0)
   prov224    Float      @default(0)
+  rel224     Float      @default(0)
   exp224     Float      @default(0)
   prov233    Float      @default(0)
+  rel233     Float      @default(0)
   exp233     Float      @default(0)
 
   @@unique([fiscalYear, code])
