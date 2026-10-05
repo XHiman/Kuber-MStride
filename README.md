@@ -92,6 +92,8 @@ npm install && npm run build
 
 For the Render Static Site that serves the frontend, set its **Publish Directory** to `frontend/dist` and its build environment variable `VITE_API_URL` to the backend web service's public base URL (for example, `https://your-backend-service.onrender.com`, without a trailing slash). The regular API client and `/adminX/api` both use this value. The build emits an `/adminX/index.html` entry so the admin URL works on direct navigation and refresh without a separate rewrite rule.
 
+The backend allows the production frontend origin `https://mstride-kuber.onrender.com` by default. Set the backend's server-side `FRONTEND_ORIGIN` environment variable to override it, or provide a comma-separated list when serving multiple frontend origins. Values must be origins only (scheme and host, no path).
+
 Legacy seed/import files are disabled in production and their package scripts have been removed. The development seed is destructive and requires explicit `ALLOW_DESTRUCTIVE_DEV_SEED=true`; a development budget import requires `ALLOW_BUDGET_IMPORT=true`. Do not set these variables in production.
 
 ### Admin panel
