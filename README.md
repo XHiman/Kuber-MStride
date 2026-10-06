@@ -45,7 +45,7 @@ Bills, budgets, transfers and search are available without signing in. Only the 
 - **Frontend:** React 18, TypeScript and Vite
 - **Backend:** NestJS 10 and TypeScript
 - **Data access:** Prisma 5
-- **Database:** SQLite by default (`backend/prisma/dev.db`)
+- **Database:** PostgreSQL through Prisma
 
 ## Get started
 
@@ -74,27 +74,65 @@ npm run build
 
 ## Database & deployment
 
-Local development uses `backend/prisma/dev.db` via `DATABASE_URL=file:./dev.db`. This repository does not seed, reset, or import records during builds or deployments.
+The active provider is PostgreSQL. For local development, set `DATABASE_URL` to a PostgreSQL connection string. The previous SQLite migrations are archived under `backend/prisma/sqlite-migrations-legacy` and must not be applied to PostgreSQL.
 
-**Production SQLite must live on a persistent disk, never in the deployed repository.** Before the next Render deploy, attach a persistent disk mounted at `/var/data`, copy the active production SQLite file to `/var/data/mitra.db` without overwriting it from the repository, and set `DATABASE_URL=file:/var/data/mitra.db` plus `DATABASE_PERSISTENT_DIR=/var/data`. The backend refuses to start if the configured production database is outside the persistent mount or missing; it will not silently create a new empty database after a deploy. Keep builds limited to `npm install && npm run build`. The production start script runs `prisma migrate deploy` against `DATABASE_URL` before starting the API, so migrations must remain reviewed, additive/schema-only operations. Do not use seed, reset, or import commands in production.
+### VM deployment (`https://data.mahamitra.org/bill/`)
 
-If your hosting plan supports a pre-deploy command, it may apply pending schema migrations before the new version is started:
+The repository is located at `/var/www/bills`; it does not replace the existing `/var/www/Nada` site files. Apache serves the built frontend at `https://data.mahamitra.org/bill/` from `/var/www/bills/frontend/dist`, and proxies `/bill-api/` to the API listening only on `127.0.0.1:3001`. PostgreSQL uses its own local port, normally `127.0.0.1:5432`. Neither backend port needs to be publicly exposed.
 
-```bash
-npm run db:migrate:deploy
-```
-
-The production start command also applies pending migrations automatically. The budget-release migration adds `rel215`, `rel224`, and `rel233` with zero defaults, preserving existing budget rows.
-
-Keep the hosting build command as:
+On an Ubuntu/Debian VM, check existing database listeners before installing PostgreSQL:
 
 ```bash
-npm install && npm run build
+sudo ss -ltnp | grep -E ':(3306|5432)\b' || true
 ```
 
-For the Render Static Site that serves the frontend, set its **Publish Directory** to `frontend/dist` and its build environment variable `VITE_API_URL` to the backend web service's public base URL (for example, `https://your-backend-service.onrender.com`, without a trailing slash). The regular API client and `/adminX/api` both use this value. The build emits an `/adminX/index.html` entry so the admin URL works on direct navigation and refresh without a separate rewrite rule.
+MariaDB normally uses port `3306`; PostgreSQL normally uses port `5432`, so they can run at the same time. Do not stop or reconfigure the existing MariaDB service. If `5432` is already occupied, configure PostgreSQL to use another free local port (for example `5433`) and use that same port in `DATABASE_URL`.
 
-The backend allows the production frontend origin `https://mstride-kuber.onrender.com` by default. Set the backend's server-side `FRONTEND_ORIGIN` environment variable to override it, or provide a comma-separated list when serving multiple frontend origins. Values must be origins only (scheme and host, no path).
+Install PostgreSQL, Apache proxy modules, and Node.js/npm:
+
+```bash
+sudo apt update
+sudo apt install postgresql postgresql-contrib apache2
+sudo a2enmod proxy proxy_http
+sudo -u postgres createuser --pwprompt mitra_app
+sudo -u postgres createdb --owner=mitra_app mahastride
+```
+
+Install a supported Node.js LTS release (Node.js 20 or newer) if it is not already installed. Put or clone this repository at `/var/www/bills`. Install dependencies and build the backend/frontend:
+
+```bash
+cd /var/www/bills
+npm install
+VITE_BASE_PATH=/bill/ VITE_API_URL=/bill-api npm run build
+sudo chown -R www-data:www-data /var/www/bills
+```
+
+Create `/etc/mahastride/mahastride.env` from `backend/.env.example`, then set the PostgreSQL URL and new secrets. With the default PostgreSQL port, the local database URL is:
+
+```env
+DATABASE_URL=postgresql://mitra_app:URL_ENCODED_PASSWORD@127.0.0.1:5432/mahastride?schema=public
+HOST=127.0.0.1
+PORT=3001
+FRONTEND_ORIGIN=https://data.mahamitra.org
+NODE_ENV=production
+ADMIN_PASSWORD=<new-long-random-password>
+ADMIN_SESSION_SECRET=<random-secret-at-least-32-characters>
+```
+
+If you configured PostgreSQL for port `5433` or another port, change `5432` in `DATABASE_URL` to match. URL-encode special characters in the PostgreSQL username/password. Keep this file outside the repository, owned by `root:www-data` with mode `0640`; never commit database credentials.
+
+Install `deploy/systemd/mahastride.service` as `/etc/systemd/system/mahastride.service`. Install `deploy/apache/bill.conf` under `/etc/apache2/conf-available/mahastride-bill.conf`, then enable it with `sudo a2enconf mahastride-bill`. The Apache snippet is intended to be included by the existing Apache site configuration and does not replace its `DocumentRoot` or HTTPS certificate. Ensure the existing HTTPS virtual host for `data.mahamitra.org` includes Apache conf-available files. Validate/reload Apache, then enable the API:
+
+```bash
+sudo apachectl configtest
+sudo systemctl reload apache2
+sudo systemctl daemon-reload
+sudo systemctl enable --now mahastride
+```
+
+The production start script runs `prisma migrate deploy` before starting the API. This migration history creates the PostgreSQL schema; it does not copy data from the previous SQLite database or MariaDB. Before retiring the old service, download its private JSON backup from the admin portal. After the new VM API is running, restore the backup through the admin portal into PostgreSQL and verify bills, budgets, transfers, and user login. Restore replaces all rows in the target database, so only do this on the new database. PostgreSQL data is stored on the VM disk; configure VM/disk backups as well.
+
+For a VM firewall, allow public HTTP/HTTPS (ports 80/443) and SSH as needed; do not expose PostgreSQL port 5432 or API port 3001 publicly. Apache proxies requests on the same origin, so browser CORS is not required for this `/bill/` deployment.
 
 Legacy seed/import files are disabled in production and their package scripts have been removed. The development seed is destructive and requires explicit `ALLOW_DESTRUCTIVE_DEV_SEED=true`; a development budget import requires `ALLOW_BUDGET_IMPORT=true`. Do not set these variables in production.
 

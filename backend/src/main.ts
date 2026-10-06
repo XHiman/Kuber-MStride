@@ -32,12 +32,13 @@ async function bootstrap() {
     }),
   );
 
-  const port =
-    (globalThis as typeof globalThis & {
-      process?: { env?: { PORT?: string } };
-    }).process?.env?.PORT || 3001;
+  const serverEnv = (globalThis as typeof globalThis & {
+    process?: { env?: { PORT?: string; HOST?: string } };
+  }).process?.env;
+  const port = serverEnv?.PORT || 3001;
+  const host = serverEnv?.HOST || '0.0.0.0';
 
-  await app.listen(port, '0.0.0.0');
+  await app.listen(port, host);
 }
 
 bootstrap();

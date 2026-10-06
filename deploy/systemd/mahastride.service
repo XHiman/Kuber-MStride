@@ -1,0 +1,18 @@
+[Unit]
+Description=MahaSTRIDE bill and budget tracker API
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/bills
+EnvironmentFile=/etc/mahastride/mahastride.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/npm run start:prod --workspace=backend
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

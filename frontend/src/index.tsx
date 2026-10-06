@@ -4,7 +4,8 @@ import App from './App';
 import AdminApp from './features/admin/AdminApp';
 import './global.css';
 
-const root = location.pathname.replace(/\/+$/, '') === '/adminX'
+const currentPath = location.pathname.replace(/\/+$/, '');
+const root = currentPath === '/adminX' || currentPath.endsWith('/adminX')
   ? <AdminApp />
   : <App />;
 

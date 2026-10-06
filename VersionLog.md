@@ -136,7 +136,7 @@ The device access-control migration must be applied before deploying the corresp
 
 Migration:
 
-`backend/prisma/migrations/20260930160000_device_access_control/migration.sql`
+`backend/prisma/sqlite-migrations-legacy/20260930160000_device_access_control/migration.sql`
 
 ---
 
@@ -146,7 +146,7 @@ Migration:
 
 Migration:
 
-`backend/prisma/migrations/20260930120000_users_search_transfer_history/migration.sql`
+`backend/prisma/sqlite-migrations-legacy/20260930120000_users_search_transfer_history/migration.sql`
 
 Schema:
 
@@ -165,7 +165,7 @@ The migration was applied to the local database.
 
 Migration:
 
-`backend/prisma/migrations/20260930124500_transfer_program_district_scope/migration.sql`
+`backend/prisma/sqlite-migrations-legacy/20260930124500_transfer_program_district_scope/migration.sql`
 
 Added persistence for the selected program/district scope on transfers.
 
@@ -173,7 +173,7 @@ Added persistence for the selected program/district scope on transfers.
 
 Migration:
 
-`backend/prisma/migrations/20260930160000_device_access_control/migration.sql`
+`backend/prisma/sqlite-migrations-legacy/20260930160000_device_access_control/migration.sql`
 
 Added device access-control support.
 
@@ -181,6 +181,9 @@ Added device access-control support.
 
 ### Local Database
 - `backend/prisma/dev.db` is a local development database.
+- It is a legacy SQLite development database and is no longer the active Prisma provider.
+- PostgreSQL is the active provider; the previous SQLite migration history is archived under `backend/prisma/sqlite-migrations-legacy`.
+- A production SQLite backup must be exported from the admin panel and restored into the new PostgreSQL database; changing providers does not copy data.
 - It must not be committed/deployed as the production database.
 - A modified local `dev.db` should be excluded from a production/code push unless there is an explicit reason to version the database file.
 
@@ -245,9 +248,10 @@ ADMIN_SESSION_SECRET=<random-secret-at-least-32-characters>
 
 ### Database
 - `backend/prisma/schema.prisma`
-- `backend/prisma/migrations/20260930120000_users_search_transfer_history/migration.sql`
-- `backend/prisma/migrations/20260930124500_transfer_program_district_scope/migration.sql`
-- `backend/prisma/migrations/20260930160000_device_access_control/migration.sql`
+- `backend/prisma/sqlite-migrations-legacy/20260930120000_users_search_transfer_history/migration.sql`
+- `backend/prisma/sqlite-migrations-legacy/20260930124500_transfer_program_district_scope/migration.sql`
+- `backend/prisma/sqlite-migrations-legacy/20260930160000_device_access_control/migration.sql`
+- `backend/prisma/migrations/20261006110000_postgresql_baseline/migration.sql`
 
 ### Backend
 - `backend/src/app.module.ts`
