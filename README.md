@@ -86,6 +86,8 @@ To create a production bundle:
 npm run build
 ```
 
+Production builds use `/bill/` as the default asset base to match the VM deployment. Set `VITE_BASE_PATH` when building for a different mount path.
+
 ## Database & deployment
 
 The active provider is PostgreSQL. For local development, set `DATABASE_URL` to a PostgreSQL connection string. The previous SQLite migrations are archived under `backend/prisma/sqlite-migrations-legacy` and must not be applied to PostgreSQL.

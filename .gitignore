@@ -12,7 +12,7 @@ favicon.svg
 .env
 .env.*
 !.env.example
-!frontend/.env.production-api
+.env.production-api
 backend/.env
 backend/.env.*
 !backend/.env.example
