@@ -18,19 +18,22 @@ const IMPORT_ENTITIES: { id: ImportEntity; label: string }[] = [
   { id: 'users', label: 'Users' },
 ];
 const IMPORT_FIELDS: Record<ImportEntity, string[]> = {
-  bills: ['sr', 'vendor', 'invoice', 'date', 'amount', 'budgetCode', 'objectHead', 'transferId', 'program', 'district', 'assignedUserId', 'bucket', 'cat', 'status', 'attribute', 'note', 'days', 'clearedFY', 'source'],
+  bills: ['sr', 'vendor', 'invoice', 'efileNumber', 'date', 'amount', 'amountSanctioned', 'budgetCode', 'objectHead', 'transferId', 'program', 'district', 'assignedUserId', 'bucket', 'cat', 'onHold', 'holdReason', 'status', 'attribute', 'note', 'days', 'clearedFY', 'source'],
   budgets: ['id', 'code', 'fiscalYear', 'name', 'nameMr', 'prov215', 'rel215', 'exp215', 'prov224', 'rel224', 'exp224', 'prov233', 'rel233', 'exp233'],
   budgetHeads: ['code', 'name', 'description'],
   objectHeads: ['code', 'name', 'nameMr'],
-  transfers: ['recipient', 'scopeType', 'purpose', 'objectCode', 'amount', 'fiscalYear', 'budgetCode', 'orderDate', 'status', 'utilized', 'remarks'],
+  transfers: ['recipient', 'scopeType', 'districtFund', 'purpose', 'objectCode', 'amount', 'fiscalYear', 'budgetCode', 'orderDate', 'status', 'utilized', 'utilizationDate', 'remarks'],
   districts: ['district', 'division', 'amount', 'releaseDate', 'remarks', 'source'],
   users: ['username', 'password', 'name', 'programs', 'districts'],
 };
 const NUMERIC_FIELDS: Partial<Record<ImportEntity, string[]>> = {
-  bills: ['sr', 'amount', 'days'],
+  bills: ['sr', 'amount', 'amountSanctioned', 'days'],
   budgets: ['prov215', 'rel215', 'exp215', 'prov224', 'rel224', 'exp224', 'prov233', 'rel233', 'exp233'],
   transfers: ['amount', 'utilized'],
   districts: ['amount'],
+};
+const BOOLEAN_FIELDS: Partial<Record<ImportEntity, string[]>> = {
+  bills: ['onHold'],
 };
 
 const ENTITIES: { id: AdminEntity; label: string }[] = [
@@ -105,6 +108,7 @@ async function parseSpreadsheet(file: File, entity: ImportEntity): Promise<Recor
   }
 
   const numericFields = new Set(NUMERIC_FIELDS[entity] ?? []);
+  const booleanFields = new Set(BOOLEAN_FIELDS[entity] ?? []);
   const rows: RecordRow[] = [];
   matrix.slice(1).forEach((cells, index) => {
     if (!cells.some(value => value !== '' && value !== null && value !== undefined)) return;
@@ -118,6 +122,13 @@ async function parseSpreadsheet(file: File, entity: ImportEntity): Promise<Recor
         const normalized = value.replace(/,/g, '').trim();
         const numericValue = Number(normalized);
         record[field] = normalized && Number.isFinite(numericValue) ? numericValue : value.trim();
+      } else if (booleanFields.has(field) && typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        record[field] = ['true', 'yes', '1'].includes(normalized)
+          ? true
+          : ['false', 'no', '0'].includes(normalized)
+            ? false
+            : value.trim();
       } else if (entity === 'users' && (field === 'programs' || field === 'districts') && typeof value === 'string') {
         record[field] = value.split('|').map(item => item.trim()).filter(Boolean);
       } else {
@@ -164,7 +175,7 @@ async function adminRequest<T>(path: string, options: RequestInit = {}): Promise
 function blankRecord(entity: AdminEntity): RecordRow {
   switch (entity) {
     case 'bills':
-      return { vendor: '', invoice: '', date: null, amount: 0, bucket: 'Invoice Raised', cat: 'in_progress', status: '', source: 'admin' };
+      return { vendor: '', invoice: '', date: null, amount: 0, amountSanctioned: null, bucket: 'Invoice Raised', cat: 'in_progress', onHold: false, holdReason: null, status: '', source: 'admin' };
     case 'budgets':
       return { code: '', fiscalYear: 'FY 2026-27', name: '', nameMr: '', prov215: 0, exp215: 0, prov224: 0, exp224: 0, prov233: 0, exp233: 0 };
     case 'budgetHeads':
@@ -172,7 +183,7 @@ function blankRecord(entity: AdminEntity): RecordRow {
     case 'objectHeads':
       return { code: '', name: '', nameMr: '' };
     case 'transfers':
-      return { recipient: '', scopeType: 'program', purpose: '', objectCode: '01', fiscalYear: 'FY 2026-27', budgetCode: 'A215', amount: 0, orderDate: null, status: 'minutes_awaited', utilized: 0, remarks: null };
+      return { recipient: '', scopeType: 'program', districtFund: null, purpose: '', objectCode: '01', fiscalYear: 'FY 2026-27', budgetCode: 'A215', amount: 0, orderDate: null, status: 'minutes_awaited', utilized: 0, utilizationDate: null, remarks: null };
     case 'districts':
       return { district: '', division: '', amount: 0, releaseDate: null, remarks: null, source: 'admin' };
     case 'users':

@@ -10,6 +10,8 @@ interface PersonalDashboard {
   pendingTasks: number;
   onHoldBills: number;
   pendingAmount: number;
+  clearedBillCount: number;
+  clearedAmount: number;
   districtRecords: { id: string; district: string; division: string; amount: number; releaseDate: string | null }[];
 }
 
@@ -57,7 +59,7 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
     return (
       <div className="panel dashboard-login">
         <h2>{t('Personal dashboard')}</h2>
-        <p>{t('Sign in with the username and password provided by your administrator. The bills, budget and transfer workspaces remain available without signing in.')}</p>
+        <p>{t('Sign in with the username and password provided by your administrator.')}</p>
         <form onSubmit={event => void submitLogin(event)}>
           <label htmlFor="dashboard-username">{t('Username')}</label>
           <input id="dashboard-username" autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} required />
@@ -80,10 +82,11 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
           <span className="note">{[...user.programs, ...user.districts].join(' · ') || t('No program or district scope set')}</span>
           <button className="btn" type="button" onClick={onLogout}>{t('Sign out')}</button>
         </div>
-        <div className="stats n4">
+        <div className="stats n5">
           {[
             { label: 'Pending tasks / bills', value: dashboard.pendingTasks, detail: `${dashboard.onHoldBills} ${t('on hold')}` },
             { label: 'Pending bill value', value: fmtShort(dashboard.pendingAmount), detail: t('across your assigned scope') },
+            { label: 'Bills cleared', value: dashboard.clearedBillCount, detail: `${fmtShort(dashboard.clearedAmount)} ${t('cleared value')}` },
             { label: 'Bills in your scope', value: dashboard.bills.length, detail: t('assigned or matching your program/district') },
             { label: 'District records', value: dashboard.districtRecords.length, detail: t('in your selected districts') },
           ].map(card => <div className="stat" key={card.label}><div className="lbl">{t(card.label)}</div><div className="val mono">{card.value}</div><div className="sub">{card.detail}</div></div>)}

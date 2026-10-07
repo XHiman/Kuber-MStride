@@ -15,8 +15,21 @@ export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnl
   const [pendingEdits, setPendingEdits] = useState<Map<string, Partial<BudgetRow>>>(new Map());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [refreshAfterEdits, setRefreshAfterEdits] = useState(false);
 
   useEffect(() => { load(); }, [fiscalYear]);
+  useEffect(() => {
+    const refreshBudget = () => {
+      if (pendingEdits.size > 0) {
+        setRefreshAfterEdits(true);
+      } else {
+        void load();
+      }
+    };
+    window.addEventListener('budget:refresh', refreshBudget);
+    return () => window.removeEventListener('budget:refresh', refreshBudget);
+  }, [fiscalYear, pendingEdits.size]);
   useEffect(() => {
     if (initialFiscalYear && initialFiscalYear !== fiscalYear) setFiscalYear(initialFiscalYear);
   }, [initialFiscalYear]);
@@ -49,12 +62,27 @@ export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnl
   });
   const rowsByCode = useMemo(() => new Map(visibleRows.map(row => [row.code, row])), [visibleRows]);
 
+  function toggleBudgetGroup(group: string) {
+    setCollapsedGroups(previous => {
+      const next = new Set(previous);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  }
+
   if (!budget) return <div className="panel"><p>{t('Loading budget data…')}</p></div>;
 
   const budgetHeads = new Map(
     (budget.budgetHeads || []).map((head: { code: string; name: string }) => [head.code, head.name]),
   );
   const headLabel = (code: string, fallback: string) => budgetHeads.get(code) || fallback;
+  const budgetGroups = [
+    { key: '215', label: 'A215' },
+    { key: '224', label: 'A224' },
+    { key: '233', label: 'A233' },
+    { key: 'total', label: 'Total' },
+  ];
 
   function getExportRows() {
     return visibleRows.map((r: BudgetRow) => ({
@@ -131,6 +159,7 @@ async function handleSave() {
     }
     await load();
     setPendingEdits(new Map());
+    setRefreshAfterEdits(false);
   } catch (error) {
     setSaveError(error instanceof Error ? error.message : 'Could not save budget changes.');
   } finally {
@@ -141,6 +170,10 @@ async function handleSave() {
 function handleUndo() {
   setSaveError('');
   setPendingEdits(new Map());
+  if (refreshAfterEdits) {
+    setRefreshAfterEdits(false);
+    void load();
+  }
 }
 
 function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
@@ -160,6 +193,7 @@ function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
   return (
     <td
       data-label={labels[field]}
+      data-budget-group={field.slice(-3)}
       className={`num mono${startsGroup ? ' budget-group-start' : ''} ${fiscalYear === 'FY Total' || readOnly ? '' : 'edit-cell'}`}
       contentEditable={!readOnly && fiscalYear !== 'FY Total'}
       suppressContentEditableWarning
@@ -181,6 +215,48 @@ function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
       }}
     >
       {fmtIN(displayValue)}
+    </td>
+  );
+}
+
+function collapsedSummary(
+  group: string,
+  expenditure: number,
+  release: number,
+  balance: number,
+  label: string,
+) {
+  const utilization = release > 0 ? pct(expenditure, release) : null;
+  const overRelease = expenditure > release;
+  const status = utilization === null
+    ? t(overRelease ? 'Over release' : 'No release')
+    : `${utilization}%`;
+  const progressWidth = utilization === null
+    ? (overRelease ? 100 : 0)
+    : Math.min(100, Math.max(0, utilization));
+  return (
+    <td
+      data-budget-group={group}
+      data-label={t(label)}
+      className={`num budget-summary-cell budget-group-start${overRelease ? ' is-over-release' : ''}`}
+    >
+      <div className="budget-summary-content" title={`${fmtIN(expenditure)} ${t('spent')} ${t('of')} ${fmtIN(release)} ${t('released')}`}>
+        <div className="budget-summary-amounts">
+          <strong>{fmtShort(expenditure)} {t('spent')}</strong>
+          <span className="budget-summary-percent">{status}</span>
+        </div>
+        <div className="budget-summary-release">
+          {release > 0 ? `${t('of')} ${fmtShort(release)} ${t('released')}` : t('No release recorded')}
+        </div>
+        <div
+          className="budget-utilization-track"
+          role="img"
+          aria-label={utilization === null ? status : `${utilization}% ${t('utilized')}`}
+        >
+          <span style={{ width: `${progressWidth}%` }} />
+        </div>
+        <div className="budget-summary-balance">{t('Balance')}: {fmtShort(balance)}</div>
+      </div>
     </td>
   );
 }
@@ -234,17 +310,85 @@ function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
           </div>
         </div>
         {saveError && <p className="admin-error" role="alert">{saveError} {t('Your edits are still pending; correct the issue and retry.')}</p>}
-        <div className="table-scroll">
-          <table className="budget-responsive-table">
+        <p className="budget-table-help">
+          {t('Use a funding-head control to switch between its four detail columns and a utilization summary. Utilization is expenditure divided by release.')}
+        </p>
+        <div className="budget-mobile-group-controls" aria-label={t('Budget column groups')}>
+          {budgetGroups.map(group => {
+            const collapsed = collapsedGroups.has(group.key);
+            return (
+              <button
+                key={group.key}
+                type="button"
+                className="budget-mobile-group-toggle"
+                onClick={() => toggleBudgetGroup(group.key)}
+                aria-expanded={!collapsed}
+              >
+                <span>{t(group.label)}</span>
+                <span>{collapsed ? t('Summary view') : t('Detail view')}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="table-scroll budget-table-scroll">
+          <table
+            className="budget-responsive-table budget-sticky-table"
+            style={{
+              minWidth: `${342 + budgetGroups.reduce(
+                (width, group) => width + (collapsedGroups.has(group.key) ? 220 : 420),
+                0,
+              )}px`,
+            }}
+          >
             <thead>
               <tr>
-                <th>{t('Code')}</th><th>{t('Object head')}</th>
-                <th className="num budget-group-start">215 {t('Provision')}</th><th className="num">215 {t('Release')}</th><th className="num">215 {t('Expenditure')}</th><th className="num">215 {t('Balance')}</th>
-                <th className="num budget-group-start">224 {t('Provision')}</th><th className="num">224 {t('Release')}</th><th className="num">224 {t('Expenditure')}</th><th className="num">224 {t('Balance')}</th>
-                <th className="num budget-group-start">233 {t('Provision')}</th><th className="num">233 {t('Release')}</th><th className="num">233 {t('Expenditure')}</th><th className="num">233 {t('Balance')}</th>
-                <th className="num budget-group-start">{t('Total provision')}</th><th className="num">{t('Total release')}</th><th className="num">{t('Total expenditure')}</th><th className="num">{t('Total balance')}</th>
+                <th rowSpan={2} className="budget-code-heading">{t('Code')}</th>
+                <th rowSpan={2} className="budget-object-heading">{t('Object head')}</th>
+                {budgetGroups.map(group => {
+                  const collapsed = collapsedGroups.has(group.key);
+                  return (
+                    <th
+                      key={group.key}
+                      colSpan={collapsed ? 1 : 4}
+                      className={`budget-group-heading${group.key === 'total' ? ' budget-total-group' : ''}`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleBudgetGroup(group.key)}
+                        aria-expanded={!collapsed}
+                        aria-label={`${collapsed ? t('Expand') : t('Collapse')} ${t(group.label)}`}
+                      >
+                        <span className="budget-group-text">
+                          <span className="budget-group-label">{t(group.label)}</span>
+                          <span className="budget-group-state">
+                            {collapsed ? t('Summary view') : t('4 detail columns')}
+                          </span>
+                        </span>
+                        <span className="budget-group-toggle" aria-hidden="true">
+                          {collapsed ? '+' : '−'}
+                        </span>
+                      </button>
+                    </th>
+                  );
+                })}
+              </tr>
+              <tr>
+                {budgetGroups.flatMap(group => {
+                  const collapsed = collapsedGroups.has(group.key);
+                  const labels = collapsed ? ['Utilization'] : ['Provision', 'Release', 'Expenditure', 'Balance'];
+                  return labels.map((label, index) => (
+                    <th
+                      key={`${group.key}-${label}`}
+                      data-budget-group={group.key}
+                      className={`budget-sub-heading${index === 0 ? ' budget-group-start' : ''}${group.key === 'total' ? ' budget-total-sub-heading' : ''}`}
+                    >
+                      {t(label)}
+                    </th>
+                  ));
+                })}
               </tr>
             </thead>
+
             <tbody>
               {BUDGET_CODE_ORDER.map(code => {
                 const r = rowsByCode.get(code);
@@ -260,34 +404,60 @@ function cell(row: BudgetRow, field: EditableBudgetField, startsGroup = false) {
                   <tr key={r.code}>
                     <td className="mono" data-label={t('Code')}>{r.code}</td>
                     <td data-label={t('Object head')}>{r.objectHead.name}<br /><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{r.objectHead.nameMr}</span></td>
-                    {cell(r, 'prov215', true)}{cell(r, 'rel215')}{cell(r, 'exp215')}<td className="num mono" data-label={t('A215 Balance')}>{fmtIN(bal215)}</td>
-                    {cell(r, 'prov224', true)}{cell(r, 'rel224')}{cell(r, 'exp224')}<td className="num mono" data-label={t('A224 Balance')}>{fmtIN(bal224)}</td>
-                    {cell(r, 'prov233', true)}{cell(r, 'rel233')}{cell(r, 'exp233')}<td className="num mono" data-label={t('A233 Balance')}>{fmtIN(bal233)}</td>
-                    <td className="num amt-cell mono budget-group-start" data-label={t('Total provision')}>{fmtIN(totProv)}</td>
-                    <td className="num amt-cell mono" data-label={t('Total release')}>{fmtIN(totRel)}</td>
-                    <td className="num amt-cell mono" data-label={t('Total expenditure')}>{fmtIN(totExp)}</td>
-                    <td className="num amt-cell mono" data-label={t('Total balance')}>{fmtIN(rowBalance)}</td>
+                    {collapsedGroups.has('215')
+                      ? collapsedSummary('215', r.exp215 || 0, r.rel215 || 0, bal215, 'A215 utilization')
+                      : <>{cell(r, 'prov215', true)}{cell(r, 'rel215')}{cell(r, 'exp215')}<td data-budget-group="215" className="num mono" data-label={t('A215 Balance')}>{fmtIN(bal215)}</td></>}
+                    {collapsedGroups.has('224')
+                      ? collapsedSummary('224', r.exp224 || 0, r.rel224 || 0, bal224, 'A224 utilization')
+                      : <>{cell(r, 'prov224', true)}{cell(r, 'rel224')}{cell(r, 'exp224')}<td data-budget-group="224" className="num mono" data-label={t('A224 Balance')}>{fmtIN(bal224)}</td></>}
+                    {collapsedGroups.has('233')
+                      ? collapsedSummary('233', r.exp233 || 0, r.rel233 || 0, bal233, 'A233 utilization')
+                      : <>{cell(r, 'prov233', true)}{cell(r, 'rel233')}{cell(r, 'exp233')}<td data-budget-group="233" className="num mono" data-label={t('A233 Balance')}>{fmtIN(bal233)}</td></>}
+                    {collapsedGroups.has('total')
+                      ? collapsedSummary('total', totExp, totRel, rowBalance, 'Total utilization')
+                      : <>
+                        <td data-budget-group="total" className="num amt-cell mono budget-group-start" data-label={t('Total provision')}>{fmtIN(totProv)}</td>
+                        <td data-budget-group="total" className="num amt-cell mono" data-label={t('Total release')}>{fmtIN(totRel)}</td>
+                        <td data-budget-group="total" className="num amt-cell mono" data-label={t('Total expenditure')}>{fmtIN(totExp)}</td>
+                        <td data-budget-group="total" className="num amt-cell mono" data-label={t('Total balance')}>{fmtIN(rowBalance)}</td>
+                      </>}
                   </tr>
                 );
               })}
               <tr className="tot-row budget-total-row">
                 <td data-label={t('Code')}></td><td data-label={t('Object head')}>{t('Total')}</td>
-                <td className="num mono budget-group-start" data-label={t('A215 Provision')}>{fmtIN(totals.prov215)}</td>
-                <td className="num mono" data-label={t('A215 Release')}>{fmtIN(totals.rel215)}</td>
-                <td className="num mono" data-label={t('A215 Expenditure')}>{fmtIN(totals.exp215)}</td>
-                <td className="num mono" data-label={t('A215 Balance')}>{fmtIN(totals.rel215 - totals.exp215)}</td>
-                <td className="num mono budget-group-start" data-label={t('A224 Provision')}>{fmtIN(totals.prov224)}</td>
-                <td className="num mono" data-label={t('A224 Release')}>{fmtIN(totals.rel224)}</td>
-                <td className="num mono" data-label={t('A224 Expenditure')}>{fmtIN(totals.exp224)}</td>
-                <td className="num mono" data-label={t('A224 Balance')}>{fmtIN(totals.rel224 - totals.exp224)}</td>
-                <td className="num mono budget-group-start" data-label={t('A233 Provision')}>{fmtIN(totals.prov233)}</td>
-                <td className="num mono" data-label={t('A233 Release')}>{fmtIN(totals.rel233)}</td>
-                <td className="num mono" data-label={t('A233 Expenditure')}>{fmtIN(totals.exp233)}</td>
-                <td className="num mono" data-label={t('A233 Balance')}>{fmtIN(totals.rel233 - totals.exp233)}</td>
-                <td className="num mono budget-group-start" data-label={t('Total provision')}>{fmtIN(grandProv)}</td>
-                <td className="num mono" data-label={t('Total release')}>{fmtIN(grandRelease)}</td>
-                <td className="num mono" data-label={t('Total expenditure')}>{fmtIN(grandExp)}</td>
-                <td className="num mono" data-label={t('Total balance')}>{fmtIN(grandBal)}</td>
+                {collapsedGroups.has('215')
+                  ? collapsedSummary('215', totals.exp215, totals.rel215, totals.rel215 - totals.exp215, 'A215 utilization')
+                  : <>
+                    <td data-budget-group="215" className="num mono budget-group-start" data-label={t('A215 Provision')}>{fmtIN(totals.prov215)}</td>
+                    <td data-budget-group="215" className="num mono" data-label={t('A215 Release')}>{fmtIN(totals.rel215)}</td>
+                    <td data-budget-group="215" className="num mono" data-label={t('A215 Expenditure')}>{fmtIN(totals.exp215)}</td>
+                    <td data-budget-group="215" className="num mono" data-label={t('A215 Balance')}>{fmtIN(totals.rel215 - totals.exp215)}</td>
+                  </>}
+                {collapsedGroups.has('224')
+                  ? collapsedSummary('224', totals.exp224, totals.rel224, totals.rel224 - totals.exp224, 'A224 utilization')
+                  : <>
+                    <td data-budget-group="224" className="num mono budget-group-start" data-label={t('A224 Provision')}>{fmtIN(totals.prov224)}</td>
+                    <td data-budget-group="224" className="num mono" data-label={t('A224 Release')}>{fmtIN(totals.rel224)}</td>
+                    <td data-budget-group="224" className="num mono" data-label={t('A224 Expenditure')}>{fmtIN(totals.exp224)}</td>
+                    <td data-budget-group="224" className="num mono" data-label={t('A224 Balance')}>{fmtIN(totals.rel224 - totals.exp224)}</td>
+                  </>}
+                {collapsedGroups.has('233')
+                  ? collapsedSummary('233', totals.exp233, totals.rel233, totals.rel233 - totals.exp233, 'A233 utilization')
+                  : <>
+                    <td data-budget-group="233" className="num mono budget-group-start" data-label={t('A233 Provision')}>{fmtIN(totals.prov233)}</td>
+                    <td data-budget-group="233" className="num mono" data-label={t('A233 Release')}>{fmtIN(totals.rel233)}</td>
+                    <td data-budget-group="233" className="num mono" data-label={t('A233 Expenditure')}>{fmtIN(totals.exp233)}</td>
+                    <td data-budget-group="233" className="num mono" data-label={t('A233 Balance')}>{fmtIN(totals.rel233 - totals.exp233)}</td>
+                  </>}
+                {collapsedGroups.has('total')
+                  ? collapsedSummary('total', grandExp, grandRelease, grandBal, 'Total utilization')
+                  : <>
+                    <td data-budget-group="total" className="num mono budget-group-start" data-label={t('Total provision')}>{fmtIN(grandProv)}</td>
+                    <td data-budget-group="total" className="num mono" data-label={t('Total release')}>{fmtIN(grandRelease)}</td>
+                    <td data-budget-group="total" className="num mono" data-label={t('Total expenditure')}>{fmtIN(grandExp)}</td>
+                    <td data-budget-group="total" className="num mono" data-label={t('Total balance')}>{fmtIN(grandBal)}</td>
+                  </>}
               </tr>
             </tbody>
           </table>

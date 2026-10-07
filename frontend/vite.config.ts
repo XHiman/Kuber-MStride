@@ -5,6 +5,18 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const apiTarget = env.VITE_API_TARGET || 'http://localhost:3001';
+  const apiPrefix = (env.VITE_API_PREFIX || '').replace(/\/+$/, '');
+  const apiPaths = ['/bills', '/budget', '/transfers', '/districts', '/users', '/search', '/adminX/api'];
+  const apiProxy = Object.fromEntries(apiPaths.map(path => [
+    path,
+    {
+      target: apiTarget,
+      changeOrigin: true,
+      rewrite: (requestPath: string) => `${apiPrefix}${requestPath}`,
+    },
+  ]));
+
   return {
     base: env.VITE_BASE_PATH || '/',
     plugins: [
@@ -25,15 +37,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: true,
-      proxy: {
-        '/bills': { target: 'http://localhost:3001', changeOrigin: true },
-        '/budget': { target: 'http://localhost:3001', changeOrigin: true },
-        '/transfers': { target: 'http://localhost:3001', changeOrigin: true },
-        '/districts': { target: 'http://localhost:3001', changeOrigin: true },
-        '/users': { target: 'http://localhost:3001', changeOrigin: true },
-        '/search': { target: 'http://localhost:3001', changeOrigin: true },
-        '/adminX/api': { target: 'http://localhost:3001', changeOrigin: true },
-      },
+      proxy: apiProxy,
     },
   };
 });

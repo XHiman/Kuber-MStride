@@ -42,15 +42,24 @@ export class UsersService {
         : Promise.resolve([]),
     ]);
     const pendingBills = bills.filter(bill => bill.cat !== 'cleared');
+    const clearedBills = bills.filter(bill => bill.cat === 'cleared');
+    const billAmount = (bill: typeof bills[number]) =>
+      bill.bucket === 'Treasury Clearance' && bill.amountSanctioned !== null
+        ? bill.amountSanctioned
+        : bill.amount;
     return {
       user: this.toProfile(user),
       bills: bills.map(bill => ({
         ...bill,
+        amount: billAmount(bill),
+        effectiveAmount: billAmount(bill),
         date: bill.date ? bill.date.toISOString().split('T')[0] : null,
       })),
-      pendingTasks: pendingBills.length,
+      pendingTasks: pendingBills.filter(bill => bill.cat !== 'on_hold').length,
       onHoldBills: pendingBills.filter(bill => bill.cat === 'on_hold').length,
-      pendingAmount: pendingBills.reduce((sum, bill) => sum + bill.amount, 0),
+      pendingAmount: pendingBills.reduce((sum, bill) => sum + billAmount(bill), 0),
+      clearedBillCount: clearedBills.length,
+      clearedAmount: clearedBills.reduce((sum, bill) => sum + billAmount(bill), 0),
       districtRecords: districtRecords.map(record => ({
         ...record,
         releaseDate: record.releaseDate ? record.releaseDate.toISOString().split('T')[0] : null,

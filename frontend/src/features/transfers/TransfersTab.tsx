@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../../lib/api';
 import { FISCAL_YEARS, type Transfer, type District, type UserProfile } from '../../types';
 import { fmtIN, fmtShort } from '../bills/utils';
@@ -6,9 +6,15 @@ import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
 import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
 
+type DistrictFund = NonNullable<Transfer['districtFund']>;
+
+const DISTRICT_BUDGET_MAPPING: Record<DistrictFund, { budgetCode: string; objectCode: string }> = {
+  incentive_funds: { budgetCode: 'A233', objectCode: '10' },
+  consultants_grant: { budgetCode: 'A233', objectCode: '10' },
+};
+
 export default function TransfersTab({ globalQuery = '', readOnly = false }: { globalQuery?: string; readOnly?: boolean }) {
   const { t } = useAppSettings();
-  const translateLabel = t;
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [transferStats, setTransferStats] = useState<any>(null);
   const [districts, setDistricts] = useState<District[]>([]);
@@ -16,27 +22,19 @@ export default function TransfersTab({ globalQuery = '', readOnly = false }: { g
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null);
+  const [programBudgetSelection, setProgramBudgetSelection] = useState<{ budgetCode: string; objectCode: string } | null>(null);
+  const [utilizationTransfer, setUtilizationTransfer] = useState<Transfer | null>(null);
+  const [utilizationDraft, setUtilizationDraft] = useState({ amount: 0, utilizedAt: localToday(), remarks: '' });
   const [showDistrictForm, setShowDistrictForm] = useState(false);
   const [districtForm, setDistrictForm] = useState({ district: '', division: '', amount: 0, releaseDate: '', remarks: '' });
-  const [collapsedRecipients, setCollapsedRecipients] = useState<Set<string>>(new Set());
-  const [recipientAnimations, setRecipientAnimations] = useState<Map<string, 'opening' | 'closing'>>(new Map());
-  const recipientAnimationTimers = useRef<Map<string, number>>(new Map());
 
   const visibleTransfers = useMemo(() => {
     const terms = globalQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
     return transfers.filter(transfer => {
-      const value = `${transfer.recipient} ${transfer.purpose} ${transfer.objectCode} ${transfer.fiscalYear} ${transfer.budgetCode || ''} ${transfer.status} ${transfer.remarks || ''} ${transfer.amount} ${transfer.orderDate || ''}`.toLowerCase();
+      const value = `${transfer.recipient} ${transfer.scopeType || ''} ${transfer.districtFund || ''} ${transfer.purpose} ${transfer.objectCode} ${transfer.fiscalYear} ${transfer.budgetCode || ''} ${transfer.status} ${transfer.remarks || ''} ${transfer.amount} ${transfer.orderDate || ''}`.toLowerCase();
       return terms.every(term => value.includes(term));
     });
   }, [transfers, globalQuery]);
-
-  const visibleDistricts = useMemo(() => {
-    const terms = globalQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    return districts.filter(district => {
-      const value = `${district.district} ${district.division} ${district.remarks || ''} ${district.amount} ${district.releaseDate || ''}`.toLowerCase();
-      return terms.every(term => value.includes(term));
-    });
-  }, [districts, globalQuery]);
 
   const programOptions = useMemo(() => [...new Set([
     ...users.flatMap(user => user.programs),
@@ -48,19 +46,10 @@ export default function TransfersTab({ globalQuery = '', readOnly = false }: { g
     ...transfers.filter(transfer => transfer.scopeType === 'district').map(transfer => transfer.recipient),
   ])].sort((left, right) => left.localeCompare(right)), [districts, transfers, users]);
 
-  const transfersByRecipient = useMemo(() => {
-    const groups = new Map<string, Transfer[]>();
-    for (const transfer of visibleTransfers) {
-      const recipientTransfers = groups.get(transfer.recipient) || [];
-      recipientTransfers.push(transfer);
-      groups.set(transfer.recipient, recipientTransfers);
-    }
-    return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
-  }, [visibleTransfers]);
-
   const [transferForm, setTransferForm] = useState({
     recipient: '',
     scopeType: 'program' as ProgramDistrictType,
+    districtFund: null as DistrictFund | null,
     purpose: '',
     objectCode: '01',
     fiscalYear: 'FY 2026-27',
@@ -69,16 +58,13 @@ export default function TransfersTab({ globalQuery = '', readOnly = false }: { g
     orderDate: localToday(),
     status: 'transferred',
     utilized: 0,
+    utilizationDate: localToday(),
     remarks: '',
   });
 
   useEffect(() => { load(); }, []);
 
-  useEffect(() => () => {
-    recipientAnimationTimers.current.forEach(timer => window.clearTimeout(timer));
-  }, []);
-
-  async function load() {
+  async function load(): Promise<Transfer[]> {
     const [stats, records, dStats, dRecords, people] = await Promise.all([
       apiClient.transfers.stats(),
       apiClient.transfers.records(),
@@ -91,56 +77,59 @@ export default function TransfersTab({ globalQuery = '', readOnly = false }: { g
     setDistrictStats(dStats);
     setDistricts(dRecords);
     setUsers(people);
+    return records;
   }
 
-  function toggleRecipient(recipient: string) {
-    const isExpanded = !collapsedRecipients.has(recipient) && recipientAnimations.get(recipient) !== 'closing';
-    const shouldExpand = !isExpanded;
-    const existingTimer = recipientAnimationTimers.current.get(recipient);
-    if (existingTimer !== undefined) window.clearTimeout(existingTimer);
-
-    if (shouldExpand) {
-      setCollapsedRecipients(previous => {
-        const next = new Set(previous);
-        next.delete(recipient);
-        return next;
-      });
-    }
-    setRecipientAnimations(previous => new Map(previous).set(recipient, shouldExpand ? 'opening' : 'closing'));
-
-    const timer = window.setTimeout(() => {
-      if (!shouldExpand) {
-        setCollapsedRecipients(previous => new Set(previous).add(recipient));
-      }
-      setRecipientAnimations(previous => {
-        const next = new Map(previous);
-        next.delete(recipient);
-        return next;
-      });
-      recipientAnimationTimers.current.delete(recipient);
-    }, 180);
-    recipientAnimationTimers.current.set(recipient, timer);
-  }
-
-  async function handleUtilizationEdit(id: string, value: number) {
-    await apiClient.transfers.update(id, { utilized: value });
-    load();
-  }
-
-  async function handleDistrictEdit(
-    id: string,
-    field: 'amount' | 'releaseDate' | 'remarks',
-    value: number | string | null,
+  async function handleUtilizationEdit(
+    transfer: Transfer,
+    utilization: Transfer['utilizations'][number],
+    data: { amount: number; utilizedAt: string; remarks: string | null },
   ) {
-    await apiClient.districts.update(id, { [field]: value });
-    await load();
+    try {
+      await apiClient.transfers.updateUtilization(transfer.id, utilization.id, data);
+      const records = await load();
+      setUtilizationTransfer(records.find(record => record.id === transfer.id) || null);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : t('Could not update utilization.'));
+    }
+  }
+
+  async function addUtilization() {
+    if (!utilizationTransfer || utilizationDraft.amount <= 0 || !utilizationDraft.utilizedAt) {
+      window.alert(t('Enter a utilization amount and date.'));
+      return;
+    }
+    try {
+      await apiClient.transfers.addUtilization(utilizationTransfer.id, {
+        ...utilizationDraft,
+        remarks: utilizationDraft.remarks.trim() || null,
+      });
+      const records = await load();
+      setUtilizationTransfer(records.find(record => record.id === utilizationTransfer.id) || null);
+      setUtilizationDraft({ amount: 0, utilizedAt: localToday(), remarks: '' });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : t('Could not add utilization.'));
+    }
+  }
+
+  async function deleteUtilization(transfer: Transfer, utilizationId: string) {
+    if (!window.confirm(t('Delete this utilization entry?'))) return;
+    try {
+      await apiClient.transfers.removeUtilization(transfer.id, utilizationId);
+      const records = await load();
+      setUtilizationTransfer(records.find(record => record.id === transfer.id) || null);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : t('Could not delete utilization.'));
+    }
   }
 
   function openAddTransfer() {
     setEditingTransfer(null);
+    setProgramBudgetSelection(null);
     setTransferForm({
       recipient: '',
       scopeType: 'program',
+      districtFund: null,
       purpose: '',
       objectCode: '01',
       fiscalYear: 'FY 2026-27',
@@ -149,6 +138,7 @@ export default function TransfersTab({ globalQuery = '', readOnly = false }: { g
       orderDate: localToday(),
       status: 'transferred',
       utilized: 0,
+      utilizationDate: localToday(),
       remarks: '',
     });
     setShowModal(true);
@@ -156,9 +146,11 @@ export default function TransfersTab({ globalQuery = '', readOnly = false }: { g
 
   function openEditTransfer(t: Transfer) {
     setEditingTransfer(t);
+    setProgramBudgetSelection(t.scopeType === 'program' ? { budgetCode: t.budgetCode || 'A215', objectCode: t.objectCode || '01' } : null);
     setTransferForm({
       recipient: t.recipient || '',
       scopeType: t.scopeType || 'program',
+      districtFund: t.districtFund,
       purpose: t.purpose || '',
       objectCode: t.objectCode || '01',
       fiscalYear: t.fiscalYear || 'FY 2026-27',
@@ -166,13 +158,17 @@ export default function TransfersTab({ globalQuery = '', readOnly = false }: { g
       amount: t.amount || 0,
       orderDate: t.orderDate || localToday(),
       status: t.status || 'transferred',
-      utilized: t.utilized || 0,
+      utilized: 0,
+      utilizationDate: localToday(),
       remarks: t.remarks || '',
     });
     setShowModal(true);
   }
 
   function selectRecipient(recipient: string, scopeType: ProgramDistrictType) {
+    if (scopeType === 'district' && transferForm.scopeType === 'program') {
+      setProgramBudgetSelection({ budgetCode: transferForm.budgetCode, objectCode: transferForm.objectCode });
+    }
     const preferences = transfers.filter(transfer => transfer.recipient === recipient && transfer.scopeType === scopeType);
     const counts = new Map<string, { count: number; purpose: string; objectCode: string }>();
     for (const transfer of preferences) {
@@ -185,12 +181,27 @@ export default function TransfersTab({ globalQuery = '', readOnly = false }: { g
       });
     }
     const frequent = [...counts.values()].sort((left, right) => right.count - left.count)[0];
+    const restoreProgramBudget = scopeType === 'program' && transferForm.scopeType === 'district'
+      ? programBudgetSelection
+      : null;
     setTransferForm(previous => ({
       ...previous,
       recipient,
       scopeType,
+      districtFund: scopeType === 'district'
+        ? (previous.scopeType === 'district' ? previous.districtFund : null)
+        : null,
       purpose: frequent?.purpose || '',
-      objectCode: frequent?.objectCode || '01',
+      objectCode: restoreProgramBudget?.objectCode
+        ?? (scopeType === 'district' && previous.districtFund
+          ? DISTRICT_BUDGET_MAPPING[previous.districtFund].objectCode
+          : frequent?.objectCode || '01'),
+      budgetCode: restoreProgramBudget?.budgetCode
+        ?? (scopeType === 'district' && previous.districtFund
+          ? DISTRICT_BUDGET_MAPPING[previous.districtFund].budgetCode
+          : scopeType === 'program' && previous.scopeType === 'district'
+            ? 'A215'
+            : previous.budgetCode),
     }));
   }
 
@@ -204,12 +215,23 @@ async function handleTransferSave() {
     return;
   }
 
-  if (editingTransfer) {
-    await apiClient.transfers.update(editingTransfer.id, transferForm);
-  } else {
-    await apiClient.transfers.create(transferForm);
+  try {
+    if (transferForm.scopeType === 'district' && !transferForm.districtFund) {
+      window.alert(t('Choose Incentive Funds or Consultants Grant for a district transfer.'));
+      return;
+    }
+    if (editingTransfer) {
+      const { utilized: _utilized, utilizationDate: _utilizationDate, ...data } = transferForm;
+      await apiClient.transfers.update(editingTransfer.id, data);
+    } else {
+      await apiClient.transfers.create(transferForm);
+    }
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : t('Could not save the transfer.'));
+    return;
   }
 
+  window.dispatchEvent(new Event('budget:refresh'));
   setShowModal(false);
   setEditingTransfer(null);
   await load();
@@ -245,7 +267,11 @@ async function handleTransferSave() {
       'Order Date': t.orderDate || '',
       Status: t.status,
       Utilized: t.utilized,
+      'District fund': t.districtFund || '',
       Balance: t.amount - t.utilized,
+      'Utilization entries': t.utilizations.map(entry =>
+        `${entry.utilizedAt}: ${fmtIN(entry.amount)}${entry.remarks ? ` (${entry.remarks})` : ''}`,
+      ).join(' | '),
       Remarks: t.remarks || '',
       'Created At': t.createdAt,
       'Last Updated At': t.updatedAt,
@@ -263,6 +289,26 @@ async function handleTransferSave() {
       }));
     });
   }
+
+  const fundTransfers = visibleTransfers.filter(transfer => transfer.scopeType === 'program' || transfer.scopeType === null);
+  const districtSections = [
+    {
+      key: 'incentive',
+      title: 'Incentive Funds',
+      records: visibleTransfers.filter(transfer => transfer.scopeType === 'district' && transfer.districtFund === 'incentive_funds'),
+    },
+    {
+      key: 'consultants',
+      title: 'Consultants Grant',
+      records: visibleTransfers.filter(transfer => transfer.scopeType === 'district' && transfer.districtFund === 'consultants_grant'),
+    },
+    {
+      key: 'untagged',
+      title: 'Untagged district transfers',
+      records: visibleTransfers.filter(transfer => transfer.scopeType === 'district' && !transfer.districtFund),
+    },
+  ];
+  const districtTransferCount = districtSections.reduce((count, section) => count + section.records.length, 0);
 
   return (
     <div className="tab-panel" id="tab-transfers">
@@ -284,220 +330,129 @@ async function handleTransferSave() {
         </div>
       )}
 
-      {/* Transfers table */}
       <div className="panel">
         <div className="panel-head">
-          <h2>{t('Fund transfers — agencies / DDOs')}</h2>
+          <h2>{t('Transfers')}</h2>
           <div className="panel-actions">
-            <span className="note">{visibleTransfers.length} {t(visibleTransfers.length === 1 ? 'record' : 'records')}</span>
+            <span className="note">{fundTransfers.length} {t(fundTransfers.length === 1 ? 'record' : 'records')}</span>
             <ExportActions getRows={getExportRows} filename="transfers" />
-            {!readOnly && <button className="btn primary" onClick={openAddTransfer}>
-  + {t('Add transfer')}
-</button>}
+            {!readOnly && <button className="btn primary" onClick={openAddTransfer}>+ {t('Add transfer')}</button>}
           </div>
         </div>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Recipient')}</th><th>{t('Purpose / object code')}</th><th className="num">{t('Amount transferred')}</th>
-                <th>{t('Order date')}</th><th>{t('Release status')}</th><th className="num">{t('Utilized to date')}</th><th className="num">{t('Balance')}</th><th>{t('Remarks')}</th>{!readOnly && <th></th>}
-              </tr>
-            </thead>
-            {visibleTransfers.length === 0 ? (
-              <tbody>
-                <tr>
-                  <td className="empty-table" colSpan={readOnly ? 8 : 9}>
-                    <div className="empty-state">
-                      <span className="empty-mark" aria-hidden="true">—</span>
-                      <span>
-                        <strong>{t('No transfers recorded')}</strong>
-                        <small>{t('Record a release to start tracking recipients, utilization, and remaining balances.')}</small>
-                      </span>
-                      {!readOnly && <button className="btn primary" onClick={openAddTransfer}>+ {t('Add transfer')}</button>}
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            ) : transfersByRecipient.map(([recipient, recipientTransfers]) => {
-              const collapsed = collapsedRecipients.has(recipient);
-              const animation = recipientAnimations.get(recipient);
-              const expanded = !collapsed && animation !== 'closing';
-              return (
-                <tbody key={recipient}>
-                <tr className="tot-row">
-                  <td colSpan={readOnly ? 8 : 9}>
-                    <button
-                      className="recipient-group-toggle"
-                      type="button"
-                      aria-expanded={expanded}
-                      aria-label={`${t(expanded ? 'Collapse' : 'Expand')} ${t('transfers for')} ${recipient}`}
-                      onClick={() => toggleRecipient(recipient)}
-                    >
-                      <svg
-                        className={`recipient-chevron ${expanded ? '' : 'collapsed'}`}
-                        aria-hidden="true"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                      >
-                        <path d="m6 8 4 4 4-4" />
-                      </svg>
-                      <span className="recipient-group-name">{recipient}</span>
-                      <span className="note">· {recipientTransfers.length} {t(recipientTransfers.length === 1 ? 'transfer' : 'transfers')} · {fmtIN(recipientTransfers.reduce((sum, transfer) => sum + transfer.amount, 0))} {t('total')}</span>
-                    </button>
-                  </td>
-                </tr>
-                {(!collapsed || animation === 'closing') && recipientTransfers.map(t => (
-                  <tr key={t.id} className={`recipient-transfer-row ${animation || ''}`}>
-                    <td className="vendor-cell">{t.recipient}</td>
-                    <td className="status-cell">
-                      {t.purpose}
-                      <br /><span className="mono" style={{ color: 'var(--text-muted)' }}>{t.objectCode} · {t.fiscalYear} · {t.budgetCode || translateLabel('Unassigned')}</span>
-                    </td>
-                    <td className="num amt-cell mono">{fmtIN(t.amount)}</td>
-                    <td className="mono">{t.orderDate ? formatDate(t.orderDate) : '—'}</td>
-                    <td><span className={`chip ${t.status}`}><span className="dot" />{translateLabel(t.status === 'transferred' ? 'Transferred' : 'Minutes awaited')}</span></td>
-                    <td className={`num${readOnly ? '' : ' edit-cell'}`}>
-                      {readOnly ? fmtIN(t.utilized) : (
-                      <input
-                        className="table-edit-input mono"
-                        type="number"
-                        min="0"
-                        max={t.amount}
-                        step="1"
-                        aria-label={`${translateLabel('Utilized amount for')} ${t.recipient}`}
-                        defaultValue={t.utilized}
-                        onBlur={event => {
-                          const value = Number(event.currentTarget.value);
-                          if (Number.isFinite(value) && value !== t.utilized) {
-                            void handleUtilizationEdit(t.id, value);
-                          }
-                        }}
-                        onKeyDown={event => {
-                          if (event.key === 'Enter') event.currentTarget.blur();
-                        }}
-                      />
-                      )}
-                    </td>
-                    <td className="num mono">{fmtIN(t.amount - t.utilized)}</td>
-                    <td className="status-cell">{t.remarks || '—'}</td>
-                    {!readOnly && <td className="row-actions"><button className="btn-icon" onClick={() => openEditTransfer(t)} title={translateLabel('Edit')}>✎</button></td>}
-                  </tr>
-                ))}
-                </tbody>
-              );
-            })}
-          </table>
-        </div>
-        <p className="reg-foot" style={{ marginTop: 10 }}>
-          <span>{t('Each row is one transfer. Linked cleared bills update that transfer’s utilized total; its amount is counted against the selected budget year/head when transferred.')}</span>
-          {!readOnly && <span>{t('Click "Utilized" to edit')}</span>}
-        </p>
+        <TransferRecordsSection
+          title="Fund Transfers"
+          records={fundTransfers}
+          readOnly={readOnly}
+          onEdit={openEditTransfer}
+          onManageUtilization={transfer => {
+            setUtilizationTransfer(transfer);
+            setUtilizationDraft({ amount: 0, utilizedAt: localToday(), remarks: '' });
+          }}
+        />
       </div>
-
-      {/* District Incentive Fund */}
-      <div className="panel">
-        <div className="panel-head">
-          <h2>{t('District Incentive Fund — DLI-1 performance grants')}</h2>
-          <div className="panel-actions">
-            <span className="note">{t('₹8 Cr / ₹12 Cr / ₹16 Cr brackets per qualifying district · per the Incentive GR dated 15 Apr 2026')}</span>
-            {!readOnly && <button className="btn primary" onClick={() => setShowDistrictForm(true)}>+ {t('Add district')}</button>}
-          </div>
-        </div>
         {districtStats && (
-          <div className="stats n4">
+          <div className="stats n3 district-transfer-stats">
             {[
               { lbl: 'Districts', val: districtStats.totalDistricts, sub: 'across 6 divisions' },
               { lbl: 'Total released', val: fmtShort(districtStats.totalReleased), sub: `${districtStats.releasedCount} ${t(districtStats.releasedCount === 1 ? 'district' : 'districts')} ${t('recorded')}` },
               { lbl: 'Awaiting release', val: districtStats.awaitingRelease, sub: 'no amount entered yet' },
-              { lbl: 'Design brackets', val: districtStats.designBrackets, sub: 'per qualifying district' },
-            ].map((s, i) => (
-              <div key={i} className="stat">
-                <div className="lbl">{t(s.lbl)}</div>
-                <div className="val mono">{s.val}</div>
-                <div className="sub">{t(s.sub)}</div>
+            ].map((stat, index) => (
+              <div key={index} className="stat">
+                <div className="lbl">{t(stat.lbl)}</div>
+                <div className="val mono">{stat.val}</div>
+                <div className="sub">{t(stat.sub)}</div>
               </div>
             ))}
           </div>
         )}
-        <div className="table-scroll" style={{ marginTop: 14 }}>
-          <table>
-            <thead>
-              <tr><th>{t('District')}</th><th>{t('Division')}</th><th className="num">{t('Amount released')}</th><th>{t('Release date')}</th><th>{t('Remarks')}</th></tr>
-            </thead>
-            <tbody>
-              {visibleDistricts.map(d => (
-                <tr key={d.id}>
-                  <td className="vendor-cell">{d.district}</td>
-                  <td className="status-cell">{d.division}</td>
-                  <td className={`num${readOnly ? '' : ' edit-cell'}`}>
-                    {readOnly ? fmtIN(d.amount) : (
-                    <input
-                      className="table-edit-input mono"
-                      type="number"
-                      min="0"
-                      step="1"
-                      aria-label={`${t('Amount released for')} ${d.district}`}
-                      defaultValue={d.amount}
-                      onBlur={event => {
-                        const value = Number(event.currentTarget.value);
-                        if (Number.isFinite(value) && value !== d.amount) {
-                          void handleDistrictEdit(d.id, 'amount', value);
-                        }
-                      }}
-                      onKeyDown={event => {
-                        if (event.key === 'Enter') event.currentTarget.blur();
-                      }}
-                    />
-                    )}
-                  </td>
-                  <td className={readOnly ? '' : 'edit-cell'}>
-                    {readOnly ? (d.releaseDate ? formatDate(d.releaseDate) : '—') : (
-                    <input
-                      className="table-edit-input mono"
-                      type="date"
-                      aria-label={`${t('Release date')} ${d.district}`}
-                      defaultValue={d.releaseDate || ''}
-                      onBlur={event => {
-                        const value = event.currentTarget.value || null;
-                        if (value !== d.releaseDate) {
-                          void handleDistrictEdit(d.id, 'releaseDate', value);
-                        }
-                      }}
-                    />
-                    )}
-                  </td>
-                  <td className={readOnly ? '' : 'edit-cell'}>
-                    {readOnly ? (d.remarks || '—') : (
-                    <input
-                      className="table-edit-input mono"
-                      type="text"
-                      aria-label={`${t('Remarks for')} ${d.district}`}
-                      defaultValue={d.remarks || ''}
-                      placeholder="—"
-                      onBlur={event => {
-                        const value = event.currentTarget.value.trim() || null;
-                        if (value !== d.remarks) {
-                          void handleDistrictEdit(d.id, 'remarks', value);
-                        }
-                      }}
-                      onKeyDown={event => {
-                        if (event.key === 'Enter') event.currentTarget.blur();
-                      }}
-                    />
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="panel district-transfer-panel">
+        <div className="panel-head">
+          <div>
+            <h2>{t('District')}</h2>
+            <p className="note">{t('District transfers grouped by fund category')}</p>
+          </div>
+          <span className="note">{districtTransferCount} {t(districtTransferCount === 1 ? 'record' : 'records')}</span>
         </div>
-        <p className="reg-foot" style={{ marginTop: 10 }}>
-          <span>{t('All 36 districts listed by division; fund design (brackets only) is finalized but district-wise qualification scoring and disbursement are not yet in any source record — fill in as SSC/Finance Dept. approves releases.')}</span>
-          {!readOnly && <span>{t('Click a cell to edit')}</span>}
-        </p>
+        <div className="district-transfer-sections">
+          {districtSections.map(section => (
+            <TransferRecordsSection
+              key={section.key}
+              title={section.title}
+              records={section.records}
+              readOnly={readOnly}
+              onEdit={openEditTransfer}
+              onManageUtilization={transfer => {
+                setUtilizationTransfer(transfer);
+                setUtilizationDraft({ amount: 0, utilizedAt: localToday(), remarks: '' });
+              }}
+            />
+          ))}
+        </div>
       </div>
 
+      {!readOnly && utilizationTransfer && (
+        <div className="modal-overlay" onClick={event => {
+          if (event.target === event.currentTarget) setUtilizationTransfer(null);
+        }}>
+          <div className="modal-card utilization-modal">
+            <h3>{t('Utilization entries')} · {utilizationTransfer.recipient}</h3>
+            <p className="note">{fmtIN(utilizationTransfer.utilized)} {t('utilized of')} {fmtIN(utilizationTransfer.amount)}</p>
+            <div className="utilization-entry-list">
+              {utilizationTransfer.utilizations.map(entry => (
+                <div className="utilization-entry" key={entry.id}>
+                  <label>{t('Amount (₹)')}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    defaultValue={entry.amount}
+                    disabled={Boolean(entry.billId)}
+                    onBlur={event => {
+                      const amount = Number(event.currentTarget.value);
+                      if (Number.isFinite(amount) && amount > 0 && amount !== entry.amount) {
+                        void handleUtilizationEdit(utilizationTransfer, entry, {
+                          amount,
+                          utilizedAt: entry.utilizedAt,
+                          remarks: entry.remarks,
+                        });
+                      }
+                    }}
+                  />
+                  <label>{t('Utilization date')}</label>
+                  <input
+                    type="date"
+                    defaultValue={entry.utilizedAt}
+                    disabled={Boolean(entry.billId)}
+                    onBlur={event => {
+                      if (event.currentTarget.value && event.currentTarget.value !== entry.utilizedAt) {
+                        void handleUtilizationEdit(utilizationTransfer, entry, {
+                          amount: entry.amount,
+                          utilizedAt: event.currentTarget.value,
+                          remarks: entry.remarks,
+                        });
+                      }
+                    }}
+                  />
+                  <span>{entry.remarks || (entry.billId ? t('Linked cleared bill') : '—')}</span>
+                  {!entry.billId && <button className="btn-icon" type="button" title={t('Delete utilization')} onClick={() => void deleteUtilization(utilizationTransfer, entry.id)}>×</button>}
+                </div>
+              ))}
+            </div>
+            <div className="utilization-entry new-utilization-entry">
+              <label>{t('Amount (₹)')}</label>
+              <input type="number" min="0" step="1" value={utilizationDraft.amount || ''} onChange={event => setUtilizationDraft({ ...utilizationDraft, amount: Number(event.target.value) || 0 })} />
+              <label>{t('Utilization date')}</label>
+              <input type="date" value={utilizationDraft.utilizedAt} onChange={event => setUtilizationDraft({ ...utilizationDraft, utilizedAt: event.target.value })} />
+              <label>{t('Remarks')}</label>
+              <input value={utilizationDraft.remarks} onChange={event => setUtilizationDraft({ ...utilizationDraft, remarks: event.target.value })} />
+            </div>
+            <div className="modal-actions">
+              <button className="btn" type="button" onClick={() => setUtilizationTransfer(null)}>{t('Close')}</button>
+              <button className="btn primary" type="button" onClick={() => void addUtilization()}>{t('Add utilization')}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {!readOnly && showModal && (
   <div
     className="modal-overlay"
@@ -521,6 +476,29 @@ async function handleTransferSave() {
           onValueChange={recipient => selectRecipient(recipient, transferForm.scopeType)}
       />
 
+      {transferForm.scopeType === 'district' && (
+        <div className="field">
+          <label>{t('District transfer category')}</label>
+          <select
+            value={transferForm.districtFund || ''}
+            onChange={event => {
+              const districtFund = (event.target.value || null) as DistrictFund | null;
+              const mapping = districtFund ? DISTRICT_BUDGET_MAPPING[districtFund] : null;
+              setTransferForm({
+                ...transferForm,
+                districtFund,
+                ...(mapping && { budgetCode: mapping.budgetCode, objectCode: mapping.objectCode }),
+              });
+            }}
+            required
+          >
+            <option value="">{t('Choose a category')}</option>
+            <option value="incentive_funds">{t('Incentive Funds')}</option>
+            <option value="consultants_grant">{t('Consultants Grant')}</option>
+          </select>
+        </div>
+      )}
+
       <div className="field">
         <label>{t('Purpose')}</label>
         <input
@@ -537,6 +515,7 @@ async function handleTransferSave() {
           <label>{t('Object code')}</label>
           <select
             value={transferForm.objectCode}
+            disabled={Boolean(transferForm.districtFund)}
             onChange={e =>
               setTransferForm({
                 ...transferForm,
@@ -559,6 +538,7 @@ async function handleTransferSave() {
           <label>{t('Budget funding head')}</label>
           <select
             value={transferForm.budgetCode}
+            disabled={Boolean(transferForm.districtFund)}
             onChange={event => setTransferForm({ ...transferForm, budgetCode: event.target.value })}
           >
             <option value="A215">A215 - {t('IPF 70 % Bank Share')}</option>
@@ -628,19 +608,30 @@ async function handleTransferSave() {
       </div>
 
       <div className="field">
-        <label>{t('Utilized to date (₹)')}</label>
-        <input
-          type="number"
-          min="0"
-          step="1"
-          value={transferForm.utilized}
-          onChange={e =>
-            setTransferForm({
-              ...transferForm,
-              utilized: parseFloat(e.target.value) || 0,
-            })
-          }
-        />
+        {editingTransfer ? (
+          <p className="note">{fmtIN(editingTransfer.utilized)} {t('utilized; manage dated utilization entries from the transfer row.')}</p>
+        ) : (
+          <>
+            <label>{t('Initial utilization amount (₹)')}</label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={transferForm.utilized}
+              onChange={e => setTransferForm({ ...transferForm, utilized: parseFloat(e.target.value) || 0 })}
+            />
+            {transferForm.utilized > 0 && (
+              <>
+                <label>{t('Utilization date')}</label>
+                <input
+                  type="date"
+                  value={transferForm.utilizationDate}
+                  onChange={e => setTransferForm({ ...transferForm, utilizationDate: e.target.value })}
+                />
+              </>
+            )}
+          </>
+        )}
       </div>
 
       <div className="field">
@@ -696,6 +687,114 @@ async function handleTransferSave() {
       </div>
     )}
     </div>
+  );
+}
+
+function TransferRecordsSection({
+  title,
+  records,
+  readOnly,
+  onEdit,
+  onManageUtilization,
+}: {
+  title: string;
+  records: Transfer[];
+  readOnly: boolean;
+  onEdit: (transfer: Transfer) => void;
+  onManageUtilization: (transfer: Transfer) => void;
+}) {
+  const { t } = useAppSettings();
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const groupedRecords = useMemo(() => {
+    const groups = new Map<string, Transfer[]>();
+    for (const transfer of records) {
+      const grouped = groups.get(transfer.recipient) || [];
+      grouped.push(transfer);
+      groups.set(transfer.recipient, grouped);
+    }
+    return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
+  }, [records]);
+
+  return (
+    <section className="transfer-category-panel">
+      {title !== 'Fund Transfers' && 
+      <div className="panel-head">
+        <h3>{t(title)}</h3>
+        <span className="note">{records.length} {t(records.length === 1 ? 'record' : 'records')}</span>
+      </div>
+}
+      {records.length === 0 ? (
+        <p className="note">{t('No transfers recorded in this section yet.')}</p>
+      ) : (
+        <div className="table-scroll">
+          <table>
+            <thead><tr>
+              <th>{t('Recipient')}</th><th>{t('Purpose / object code')}</th><th className="num">{t('Amount transferred')}</th>
+              <th>{t('Order date')}</th><th>{t('Release status')}</th><th className="num">{t('Utilized to date')}</th>
+              <th className="num">{t('Balance')}</th><th>{t('Remarks')}</th>{!readOnly && <th></th>}
+            </tr></thead>
+            {groupedRecords.map(([recipient, recipientTransfers]) => {
+              const isCollapsed = collapsed.has(recipient);
+              return (
+                <tbody key={recipient}>
+                  <tr className="tot-row">
+                    <td colSpan={readOnly ? 8 : 9}>
+                      <button
+                        className="recipient-group-toggle"
+                        type="button"
+                        aria-expanded={!isCollapsed}
+                        onClick={() => setCollapsed(previous => {
+                          const next = new Set(previous);
+                          if (next.has(recipient)) next.delete(recipient);
+                          else next.add(recipient);
+                          return next;
+                        })}
+                      >
+                        <span className={`recipient-chevron${isCollapsed ? ' collapsed' : ''}`} aria-hidden="true"><svg
+                        className={`recipient-chevron ${isCollapsed ? 'collapsed' : ''}`}
+                        aria-hidden="true"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                      >
+                        <path d="m6 8 4 4 4-4" />
+                      </svg></span>
+                        <span className="recipient-group-name">{recipient}</span>
+                        <span className="note">· {recipientTransfers.length} {t(recipientTransfers.length === 1 ? 'transfer' : 'transfers')} · {fmtIN(recipientTransfers.reduce((sum, transfer) => sum + transfer.amount, 0))} {t('total')}</span>
+                      </button>
+                    </td>
+                  </tr>
+                  {!isCollapsed && recipientTransfers.map(transfer => (
+                    <tr key={transfer.id}>
+                      <td className="vendor-cell">{transfer.recipient}</td>
+                      <td className="status-cell">
+                        {transfer.purpose}
+                        <br /><span className="mono" style={{ color: 'var(--text-muted)' }}>{transfer.objectCode} · {transfer.fiscalYear} · {transfer.budgetCode || t('Unassigned')}</span>
+                      </td>
+                      <td className="num amt-cell mono">{fmtIN(transfer.amount)}</td>
+                      <td className="mono">{transfer.orderDate ? formatDate(transfer.orderDate) : '—'}</td>
+                      <td><span className={`chip ${transfer.status}`}><span className="dot" />{t(transfer.status === 'transferred' ? 'Transferred' : 'Minutes awaited')}</span></td>
+                      <td className="num">
+                        {readOnly ? fmtIN(transfer.utilized) : (
+                          <button className="btn utilization-manage-button" type="button" onClick={() => onManageUtilization(transfer)}>
+                            {fmtIN(transfer.utilized)} · {transfer.utilizations.length} {t('entries')}
+                          </button>
+                        )}
+                      </td>
+                      <td className="num mono">{fmtIN(transfer.amount - transfer.utilized)}</td>
+                      <td className="status-cell">{transfer.remarks || '—'}</td>
+                      {!readOnly && <td className="row-actions"><button className="btn-icon" onClick={() => onEdit(transfer)} title={t('Edit')}>✎</button></td>}
+                    </tr>
+                  ))}
+                </tbody>
+              );
+            })}
+          </table>
+        </div>
+      )}
+      <p className="reg-foot" style={{ marginTop: 10 }}>
+        <span>{t('Linked cleared bills update this transfer’s utilization total; dated utilization entries are stored under their transfer.')}</span>
+      </p>
+    </section>
   );
 }
 

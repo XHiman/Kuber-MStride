@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Put, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, UseGuards } from '@nestjs/common';
 import { DistrictsService } from './districts.service';
+import { UserSessionGuard } from '../users/user-session.guard';
 
 @Controller('districts')
 export class DistrictsController {
@@ -16,11 +17,13 @@ export class DistrictsController {
   }
 
   @Post()
+  @UseGuards(UserSessionGuard)
   async create(@Body() data: any) {
     return this.districtsService.create(data);
   }
 
   @Put(':id')
+  @UseGuards(UserSessionGuard)
   async update(@Param('id') id: string, @Body() data: any) {
     return this.districtsService.update(id, data);
   }

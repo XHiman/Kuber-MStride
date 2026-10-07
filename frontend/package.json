@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:production-api": "vite --mode production-api",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

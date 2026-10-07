@@ -31,10 +31,10 @@ The interface supports **light and dark appearance** and **English and Marathi U
 
 | Workspace | What it helps you do |
 | --- | --- |
-| **Bills pipeline** | Track six clearance checkpoints, search and filter the register, select or enter a Vendor/DSU as a Program or District, assign bills to a person, review aging and exceptions, and copy or download the register. |
-| **Budget by FY** | Review provisions, expenditure and balance by object code across FY 2024-25–2029-30, or use the read-only **FY Total** view. Search globally and use the compact mobile budget cards. |
-| **Fund transfers** | Select or enter recipients as Programs or Districts, reuse their most frequent purpose/object code, and audit transfer changes and utilization history. |
-| **Dashboard** | Sign in with an administrator-provisioned account to see personal bill and district work. |
+| **Bills pipeline** | Track six clearance checkpoints and their entry timestamps, record an E-file number and sanctioned amount at Treasury Clearance, move bills to the next stage, put bills on hold with remarks, and open pending/held bills directly for editing. The register combines the Program/District column and reveals row actions on hover or keyboard focus. Held bills are excluded from oldest-open figures. |
+| **Budget by FY** | Review provisions, expenditure and balance by object code across FY 2024-25–2029-30, or use the read-only **FY Total** view. The desktop table keeps its header and first two columns fixed and lets each four-column funding group collapse together. |
+| **Transfers** | Keep Program releases in Fund Transfers and classify District releases as Incentive Funds or Consultants Grant. Each utilization entry is dated and stored under its transfer; district categories default to A233 / object code 10. |
+| **Dashboard** | Sign in with an administrator-provisioned account to see personal bill and district work, including cleared-bill counts and value. |
 
 The global search bar searches bills, budgets, transfers, districts and people from any tab. Exports first copy the full CSV-formatted table to the clipboard; a CSV download action appears after a successful copy.
 
@@ -64,7 +64,21 @@ npm run db:migrate
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). The Vite frontend proxies API requests to the NestJS API on port `3001`. The database is not seeded automatically.
+Open [http://localhost:3000](http://localhost:3000). The Vite frontend proxies API requests to the NestJS API on port `3001`. The database is not seeded automatically.
+
+### Switch the local frontend between local and live data
+
+By default, `npm run dev` runs the local backend and frontend; the frontend proxies API requests to `http://localhost:3001`. To use the deployed VM API instead, stop the default dev process and run:
+
+```bash
+npm run dev:production-api
+```
+
+This serves the frontend locally at `http://localhost:3000`, while Vite proxies its API requests through `https://data.mahamitra.org/bill-api`. The browser still talks only to localhost, so no production CORS change is needed. To switch back, stop that process and run `npm run dev` again.
+
+**Production mode writes to the live database.** Creating, editing, importing, or deleting records from this local UI changes production data. Use the admin database backup before risky operations. The proxy target is set in the tracked `frontend/.env.production-api` file.
+
+The local PostgreSQL Windows service is running on this development PC, but local backend startup also needs a valid `DATABASE_URL` and a database role/password configured in the ignored `backend/.env` file. Copy `backend/.env.example` and fill in local credentials; never commit that file. The `DATABASE_URL` already in an environment file on another machine is not reused automatically.
 
 To create a production bundle:
 
@@ -140,7 +154,7 @@ Legacy seed/import files are disabled in production and their package scripts ha
 
 Open `/adminX` to sign in and manage bills, budgets, budget heads, object heads, transfers, districts and user accounts. The panel uses an expiring, tab-scoped signed session so authentication works when the static frontend and API are hosted on separate origins. For local development, copy `backend/.env.example` to `backend/.env` and replace the placeholder values with a new password and a random `ADMIN_SESSION_SECRET` of at least 32 characters. The backend loads this file on startup; it is git-ignored. In production, configure the admin values as server-only deployment secrets. Never place credentials in frontend variables or source control. Rotate any password previously shared in chat before deployment. Set each dashboard user's unique username and an initial password of at least 10 characters in their admin user record; set a new password on that record to reset it.
 
-The admin panel can import rows from `.xlsx` or `.csv` files for bills, budgets, budget heads, object heads, transfers, districts and users. Budget imports update an existing row when `fiscalYear` and `code` match, adding only rows without a match; blank cells leave existing values unchanged. Other entity imports remain additive and do not update or deduplicate existing records. Download a CSV template to get the exact column names. User imports require a unique username and password. For bills, any populated `budgetCode`, `objectHead`, `transferId` or `assignedUserId` must match an existing record; import the referenced tables first or leave optional reference cells blank. Rows are checked independently, and the admin reports specific row errors with a downloadable CSV report. The **Download whole database** action exports every table, including transfer history and user password hashes, to a versioned JSON backup. Keep this file private. **Replace database from backup** restores that file atomically and replaces all current records; take a fresh backup first. Restore works against the current schema and ignores fields no longer recognized by the running version.
+The admin panel can import rows from `.xlsx` or `.csv` files for bills, budgets, budget heads, object heads, transfers, districts and users. Bill imports accept the optional `efileNumber` column. Budget imports update an existing row when `fiscalYear` and `code` match, adding only rows without a match; blank cells leave existing values unchanged. Other entity imports remain additive and do not update or deduplicate existing records. Download a CSV template to get the exact column names. User imports require a unique username and password. For bills, any populated `budgetCode`, `objectHead`, `transferId` or `assignedUserId` must match an existing record; import the referenced tables first or leave optional reference cells blank. Rows are checked independently, and the admin reports specific row errors with a downloadable CSV report. The **Download whole database** action exports every table, including bill stage history, transfer history, and user password hashes, to a versioned JSON backup. Keep this file private. **Replace database from backup** restores that file atomically and replaces all current records; take a fresh backup first. Restore works against the current schema and ignores fields no longer recognized by the running version.
 
 ## Repository map
 
@@ -166,9 +180,12 @@ frontend/
 - Supported fiscal years are **FY 2024-25 through FY 2029-30**. **FY Total** aggregates these years and is read-only.
 - The fiscal-year importer does not overwrite expenditure.
 - A transferred amount affects its selected fiscal-year budget head. Edits or removal reverse the corresponding impact.
+- A bill's sanctioned amount is its effective cleared amount when present at Treasury Clearance; otherwise the raised amount is used. A hold remark is required when a bill is put on hold.
+- Bill stage history records each tracked transition. Existing bills receive a one-time snapshot of their current stage when the history migration is applied; earlier transitions cannot be reconstructed.
 - A cleared bill linked to a transfer updates that transfer's utilization; it is not counted against budget a second time.
+- Each manual utilization and linked cleared-bill utilization is stored as a child record with its own date. Existing aggregate utilization is migrated with a note that its original entry date is unavailable.
 - Bill clearance year is derived from the clearance date in its status entry where available.
-- District fund entries are tracked separately from agency transfer expenditure.
+- Standalone district release records remain separate from transfer accounting.
 
 ## API overview
 
@@ -184,6 +201,8 @@ The frontend communicates with the NestJS API. Common routes include:
 | `GET`, `POST` | `/transfers` | Transfer summary or create a transfer |
 | `GET` | `/transfers/records` | List transfer records |
 | `PUT`, `DELETE` | `/transfers/:id` | Update or remove a transfer |
+| `POST` | `/transfers/:id/utilizations` | Add a dated utilization entry |
+| `PUT`, `DELETE` | `/transfers/:id/utilizations/:utilizationId` | Update or remove a manual utilization entry |
 | `GET` | `/search?q=…` | Search bills, budgets, transfers, districts and users |
 | `GET` | `/users` | List named users |
 | `POST` | `/users/login` | Sign in to the personal dashboard |

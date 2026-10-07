@@ -60,6 +60,12 @@ export const apiClient = {
     records: () => api<import('../types').Transfer[]>('/transfers/records'),
     create: (data: any) => api<any>('/transfers', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => api<any>(`/transfers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    addUtilization: (id: string, data: { amount: number; utilizedAt: string; remarks?: string | null }) =>
+      api<any>(`/transfers/${id}/utilizations`, { method: 'POST', body: JSON.stringify(data) }),
+    updateUtilization: (id: string, utilizationId: string, data: { amount: number; utilizedAt: string; remarks?: string | null }) =>
+      api<any>(`/transfers/${id}/utilizations/${utilizationId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    removeUtilization: (id: string, utilizationId: string) =>
+      api<any>(`/transfers/${id}/utilizations/${utilizationId}`, { method: 'DELETE' }),
     remove: (id: string) => api<any>(`/transfers/${id}`, { method: 'DELETE' }),
   },
   districts: {

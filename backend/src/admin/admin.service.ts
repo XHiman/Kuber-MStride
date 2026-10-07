@@ -2,7 +2,7 @@ import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillsService } from '../bills/bills.service';
-import { TransfersService, type TransferInput } from '../transfers/transfers.service';
+import { TransfersService, type DistrictFund, type TransferInput } from '../transfers/transfers.service';
 import { UserAuthService } from '../users/user-auth.service';
 
 export type AdminEntity =
@@ -17,13 +17,15 @@ export type AdminEntity =
 type JsonRecord = Record<string, unknown>;
 
 const BACKUP_FORMAT = 'mahastride-database-backup';
-const BACKUP_VERSION = 2;
+const BACKUP_VERSION = 4;
 const BACKUP_TABLES = [
   'bills',
+  'billStageHistory',
   'budgets',
   'budgetHeads',
   'objectHeads',
   'transfers',
+  'transferUtilizations',
   'transferHistory',
   'districts',
   'users',
@@ -84,13 +86,15 @@ export class AdminService {
   }
 
   async createBackup() {
-    const [bills, budgets, budgetHeads, objectHeads, transfers, transferHistory, districts, users] =
+    const [bills, billStageHistory, budgets, budgetHeads, objectHeads, transfers, transferUtilizations, transferHistory, districts, users] =
       await Promise.all([
         this.prisma.bill.findMany(),
+        this.prisma.billStageHistory.findMany(),
         this.prisma.budget.findMany(),
         this.prisma.budgetHead.findMany(),
         this.prisma.objectHead.findMany(),
         this.prisma.transfer.findMany(),
+        this.prisma.transferUtilization.findMany(),
         this.prisma.transferHistory.findMany(),
         this.prisma.district.findMany(),
         this.prisma.user.findMany(),
@@ -100,7 +104,7 @@ export class AdminService {
       format: BACKUP_FORMAT,
       version: BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
-      tables: { bills, budgets, budgetHeads, objectHeads, transfers, transferHistory, districts, users },
+      tables: { bills, billStageHistory, budgets, budgetHeads, objectHeads, transfers, transferUtilizations, transferHistory, districts, users },
     };
   }
 
@@ -109,7 +113,7 @@ export class AdminService {
       throw new BadRequestException('The backup file must contain a JSON object.');
     }
     const backup = input as JsonRecord;
-    if (backup.format !== BACKUP_FORMAT || (backup.version !== 1 && backup.version !== BACKUP_VERSION)) {
+    if (backup.format !== BACKUP_FORMAT || ![1, 2, 3, BACKUP_VERSION].includes(Number(backup.version))) {
       throw new BadRequestException('This is not a supported MahaSTRIDE database backup.');
     }
     if (!backup.tables || typeof backup.tables !== 'object' || Array.isArray(backup.tables)) {
@@ -128,23 +132,48 @@ export class AdminService {
         'prov215', 'rel215', 'exp215', 'prov224', 'rel224', 'exp224', 'prov233', 'rel233', 'exp233',
       ]),
       transfers: this.backupRows(tables, 'transfers', [
-        'id', 'recipient', 'scopeType', 'purpose', 'objectCode', 'amount', 'fiscalYear', 'budgetCode',
+        'id', 'recipient', 'scopeType', 'districtFund', 'purpose', 'objectCode', 'amount', 'fiscalYear', 'budgetCode',
         'orderDate', 'status', 'utilized', 'remarks', 'source', 'createdAt', 'updatedAt',
       ], ['orderDate', 'createdAt', 'updatedAt']),
+      transferUtilizations: Array.isArray(tables.transferUtilizations)
+        ? this.backupRows(tables, 'transferUtilizations', [
+            'id', 'transferId', 'billId', 'amount', 'utilizedAt', 'remarks', 'createdAt',
+          ], ['utilizedAt', 'createdAt'])
+        : [],
       districts: this.backupRows(tables, 'districts', [
         'id', 'district', 'division', 'amount', 'releaseDate', 'remarks', 'source', 'createdAt', 'updatedAt',
       ], ['releaseDate', 'createdAt', 'updatedAt']),
       bills: this.backupRows(tables, 'bills', [
-        'id', 'sr', 'vendor', 'invoice', 'date', 'amount', 'budgetCode', 'objectHead', 'transferId',
-        'program', 'district', 'assignedUserId', 'bucket', 'cat', 'status', 'attribute', 'note',
+        'id', 'sr', 'vendor', 'invoice', 'efileNumber', 'date', 'amount', 'amountSanctioned', 'budgetCode', 'objectHead', 'transferId',
+        'program', 'district', 'assignedUserId', 'bucket', 'cat', 'onHold', 'holdReason', 'status', 'attribute', 'note',
         'days', 'clearedFY', 'source', 'createdAt', 'updatedAt',
       ], ['date', 'createdAt', 'updatedAt']),
+      billStageHistory: Number(backup.version) >= 4
+        ? this.backupRows(tables, 'billStageHistory', [
+            'id', 'billId', 'stage', 'enteredAt', 'source',
+          ], ['enteredAt'])
+        : [],
       transferHistory: this.backupRows(tables, 'transferHistory', [
         'id', 'transferId', 'changedAt', 'field', 'oldValue', 'newValue',
       ], ['changedAt']),
     };
+    if (!data.billStageHistory.length && Number(backup.version) < 4) {
+      data.billStageHistory = data.bills.map(bill => ({
+        id: `legacy-stage-${bill.id}`,
+        billId: bill.id,
+        stage: String(bill.bucket || 'Invoice Raised'),
+        enteredAt: bill.updatedAt instanceof Date
+          ? bill.updatedAt
+          : bill.createdAt instanceof Date
+            ? bill.createdAt
+            : new Date(),
+        source: 'legacy_backup_snapshot',
+      }));
+    }
 
     await this.prisma.$transaction(async (tx) => {
+      await tx.billStageHistory.deleteMany();
+      await tx.transferUtilization.deleteMany();
       await tx.transferHistory.deleteMany();
       await tx.bill.deleteMany();
       await tx.transfer.deleteMany();
@@ -161,6 +190,21 @@ export class AdminService {
       if (data.transfers.length) await tx.transfer.createMany({ data: data.transfers as Prisma.TransferCreateManyInput[] });
       if (data.districts.length) await tx.district.createMany({ data: data.districts as Prisma.DistrictCreateManyInput[] });
       if (data.bills.length) await tx.bill.createMany({ data: data.bills as Prisma.BillCreateManyInput[] });
+      if (data.billStageHistory.length) {
+        await tx.billStageHistory.createMany({ data: data.billStageHistory as Prisma.BillStageHistoryCreateManyInput[] });
+      }
+      const utilizationRows = data.transferUtilizations.length
+        ? data.transferUtilizations
+        : this.legacyUtilizationRows(data.transfers, data.bills);
+      if (utilizationRows.length) {
+        await tx.transferUtilization.createMany({ data: utilizationRows as Prisma.TransferUtilizationCreateManyInput[] });
+      }
+      for (const transfer of data.transfers) {
+        const utilized = utilizationRows
+          .filter(entry => entry.transferId === transfer.id)
+          .reduce((sum, entry) => sum + Number(entry.amount), 0);
+        await tx.transfer.update({ where: { id: transfer.id as string }, data: { utilized } });
+      }
       if (data.transferHistory.length) {
         await tx.transferHistory.createMany({ data: data.transferHistory as Prisma.TransferHistoryCreateManyInput[] });
       }
@@ -207,22 +251,31 @@ export class AdminService {
     switch (entity) {
       case 'bills': {
         const value = this.pick(input, [
-          'sr', 'vendor', 'invoice', 'date', 'amount', 'budgetCode', 'objectHead',
+          'sr', 'vendor', 'invoice', 'efileNumber', 'date', 'amount', 'amountSanctioned', 'budgetCode', 'objectHead',
           'transferId', 'program', 'district', 'assignedUserId', 'bucket', 'cat',
-          'status', 'attribute', 'note', 'days', 'clearedFY', 'source',
+          'onHold', 'holdReason', 'status', 'attribute', 'note', 'days', 'clearedFY', 'source',
         ]);
         this.requireString(value, 'vendor');
         this.requireString(value, 'invoice');
         this.requireString(value, 'status');
         this.requireNumber(value, 'amount');
+        if (value.onHold !== undefined && typeof value.onHold !== 'boolean') {
+          throw new BadRequestException('onHold must be true or false.');
+        }
+        this.validateOptionalNumberFields(value, ['amountSanctioned']);
+        this.validateOptionalStringFields(value, ['efileNumber', 'holdReason']);
         const bill = await this.bills.create({
           sr: this.optionalNumber(value.sr) ?? null,
           vendor: value.vendor as string,
           invoice: value.invoice as string,
+          efileNumber: this.nullableString(value.efileNumber),
           date: this.date(value.date),
           amount: value.amount as number,
+          amountSanctioned: this.optionalNumber(value.amountSanctioned) ?? null,
           bucket: this.optionalString(value.bucket) ?? 'Invoice Raised',
           cat: this.optionalString(value.cat) ?? 'in_progress',
+          onHold: value.onHold === true,
+          holdReason: this.nullableString(value.holdReason),
           status: value.status as string,
           attribute: this.nullableString(value.attribute),
           note: this.nullableString(value.note),
@@ -326,15 +379,18 @@ export class AdminService {
     switch (entity) {
       case 'bills': {
         const value = this.pick(input, [
-          'sr', 'vendor', 'invoice', 'date', 'amount', 'budgetCode', 'objectHead',
+          'sr', 'vendor', 'invoice', 'efileNumber', 'date', 'amount', 'amountSanctioned', 'budgetCode', 'objectHead',
           'transferId', 'program', 'district', 'assignedUserId', 'bucket', 'cat',
-          'status', 'attribute', 'note', 'days', 'clearedFY', 'source',
+          'onHold', 'holdReason', 'status', 'attribute', 'note', 'days', 'clearedFY', 'source',
         ]);
         this.validateOptionalStringFields(value, [
-          'vendor', 'invoice', 'budgetCode', 'objectHead', 'transferId', 'program', 'district',
-          'assignedUserId', 'bucket', 'cat', 'status', 'attribute', 'note', 'clearedFY', 'source',
+          'vendor', 'invoice', 'efileNumber', 'budgetCode', 'objectHead', 'transferId', 'program', 'district',
+          'assignedUserId', 'bucket', 'cat', 'holdReason', 'status', 'attribute', 'note', 'clearedFY', 'source',
         ]);
-        this.validateOptionalNumberFields(value, ['sr', 'amount', 'days']);
+        this.validateOptionalNumberFields(value, ['sr', 'amount', 'amountSanctioned', 'days']);
+        if (value.onHold !== undefined && typeof value.onHold !== 'boolean') {
+          throw new BadRequestException('onHold must be true or false.');
+        }
         return this.bills.update(id, {
           ...value,
           ...(this.hasOwn(value, 'date') ? { date: this.date(value.date) } : {}),
@@ -485,11 +541,11 @@ export class AdminService {
   private transferInput(input: JsonRecord, partial: true): Partial<TransferInput>;
   private transferInput(input: JsonRecord, partial = false): TransferInput | Partial<TransferInput> {
     const value = this.pick(input, [
-      'recipient', 'scopeType', 'purpose', 'objectCode', 'amount', 'fiscalYear',
-      'budgetCode', 'orderDate', 'status', 'utilized', 'remarks',
+      'recipient', 'scopeType', 'districtFund', 'purpose', 'objectCode', 'amount', 'fiscalYear',
+      'budgetCode', 'orderDate', 'status', 'utilized', 'utilizationDate', 'remarks',
     ]);
     this.validateOptionalStringFields(value, [
-      'recipient', 'scopeType', 'purpose', 'objectCode', 'fiscalYear', 'budgetCode', 'status', 'remarks',
+      'recipient', 'scopeType', 'districtFund', 'purpose', 'objectCode', 'fiscalYear', 'budgetCode', 'status', 'remarks',
     ]);
     this.validateOptionalNumberFields(value, ['amount', 'utilized']);
     if (!partial) {
@@ -504,6 +560,7 @@ export class AdminService {
       return {
         recipient: this.requireString(value, 'recipient'),
         scopeType: scopeType ?? null,
+        districtFund: this.transferDistrictFund(value.districtFund),
         purpose: this.requireString(value, 'purpose'),
         objectCode: this.optionalString(value.objectCode) ?? '01',
         amount: this.requireNumber(value, 'amount'),
@@ -512,6 +569,7 @@ export class AdminService {
         orderDate: this.date(value.orderDate)?.toISOString().slice(0, 10) ?? null,
         status: status ?? 'minutes_awaited',
         utilized: this.optionalNumber(value.utilized) ?? 0,
+        utilizationDate: this.date(value.utilizationDate)?.toISOString().slice(0, 10) ?? null,
         remarks: this.nullableString(value.remarks),
       };
     }
@@ -524,6 +582,9 @@ export class AdminService {
         throw new BadRequestException('scopeType must be program or district.');
       }
       result.scopeType = scopeType ?? null;
+    }
+    if (this.hasOwn(value, 'districtFund')) {
+      result.districtFund = this.transferDistrictFund(value.districtFund);
     }
     if (this.hasOwn(value, 'purpose')) result.purpose = this.requireString(value, 'purpose');
     if (this.hasOwn(value, 'objectCode')) result.objectCode = this.requireString(value, 'objectCode');
@@ -539,6 +600,7 @@ export class AdminService {
       result.status = status;
     }
     if (this.hasOwn(value, 'utilized')) result.utilized = this.requireNumber(value, 'utilized');
+    if (this.hasOwn(value, 'utilizationDate')) result.utilizationDate = this.date(value.utilizationDate)?.toISOString().slice(0, 10) ?? null;
     if (this.hasOwn(value, 'remarks')) result.remarks = this.nullableString(value.remarks);
     return result;
   }
@@ -549,6 +611,48 @@ export class AdminService {
       if (this.hasOwn(input, field)) value[field] = input[field];
     }
     return value;
+  }
+
+  private transferDistrictFund(value: unknown): DistrictFund | null {
+    const category = this.optionalString(value)?.toLowerCase().replace(/[\s-]+/g, '_');
+    if (!category) return null;
+    if (category === 'incentive_funds' || category === 'consultants_grant') return category;
+    throw new BadRequestException('districtFund must be incentive_funds or consultants_grant.');
+  }
+
+  private legacyUtilizationRows(transfers: JsonRecord[], bills: JsonRecord[]): JsonRecord[] {
+    const rows: JsonRecord[] = [];
+    const linkedAmounts = new Map<string, number>();
+    for (const bill of bills) {
+      if (bill.cat !== 'cleared' || typeof bill.transferId !== 'string') continue;
+      const amount = bill.bucket === 'Treasury Clearance' && typeof bill.amountSanctioned === 'number'
+        ? bill.amountSanctioned
+        : Number(bill.amount);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const transferId = bill.transferId;
+      linkedAmounts.set(transferId, (linkedAmounts.get(transferId) || 0) + amount);
+      rows.push({
+        id: `restored-bill-util-${String(bill.id)}`,
+        transferId,
+        billId: bill.id,
+        amount,
+        utilizedAt: bill.updatedAt instanceof Date ? bill.updatedAt : new Date(),
+        remarks: `Linked cleared bill: ${String(bill.vendor || '')} / ${String(bill.invoice || '')}`,
+      });
+    }
+    for (const transfer of transfers) {
+      const transferId = String(transfer.id);
+      const legacyAmount = Number(transfer.utilized || 0) - (linkedAmounts.get(transferId) || 0);
+      if (legacyAmount <= 0) continue;
+      rows.push({
+        id: `restored-legacy-util-${transferId}`,
+        transferId,
+        amount: legacyAmount,
+        utilizedAt: transfer.updatedAt instanceof Date ? transfer.updatedAt : new Date(),
+        remarks: 'Restored aggregate utilization; original entry date unavailable',
+      });
+    }
+    return rows;
   }
 
   private backupRows(

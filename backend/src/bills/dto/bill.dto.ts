@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsDateString } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsDateString, IsBoolean } from 'class-validator';
 
 export class CreateBillDto {
   @IsString()
@@ -7,12 +7,28 @@ export class CreateBillDto {
   @IsString()
   invoice!: string;
 
+  @IsString()
+  @IsOptional()
+  efileNumber?: string | null;
+
   @IsDateString()
   @IsOptional()
   date: string | null = null;
 
   @IsNumber()
   amount!: number;
+
+  @IsNumber()
+  @IsOptional()
+  amountSanctioned?: number | null;
+
+  @IsBoolean()
+  @IsOptional()
+  onHold?: boolean;
+
+  @IsString()
+  @IsOptional()
+  holdReason?: string | null;
 
   @IsString()
   status!: string;
@@ -79,6 +95,10 @@ export class UpdateBillDto {
   @IsOptional()
   invoice?: string;
 
+  @IsString()
+  @IsOptional()
+  efileNumber?: string | null;
+
   @IsDateString()
   @IsOptional()
   date?: string | null;
@@ -86,6 +106,22 @@ export class UpdateBillDto {
   @IsNumber()
   @IsOptional()
   amount?: number;
+
+  @IsNumber()
+  @IsOptional()
+  amountSanctioned?: number | null;
+
+  @IsBoolean()
+  @IsOptional()
+  onHold?: boolean;
+
+  @IsString()
+  @IsOptional()
+  holdReason?: string | null;
+
+  @IsString()
+  @IsOptional()
+  cat?: string;
 
   @IsString()
   @IsOptional()

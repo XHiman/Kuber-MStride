@@ -14,8 +14,11 @@ export interface Bill {
   sr: number | null;
   vendor: string;
   invoice: string;
+  efileNumber: string | null;
   date: string | null;
   amount: number;
+  amountSanctioned: number | null;
+  effectiveAmount?: number;
   budgetCode: string | null;
   objectHead: string | null;
   transferId: string | null;
@@ -24,14 +27,24 @@ export interface Bill {
   assignedUserId: string | null;
   bucket: string;
   cat: BillCategory;
+  onHold: boolean;
+  holdReason: string | null;
   status: string;
   attribute: string | null;
   note: string | null;
   days: number | null;
   clearedFY: string | null;
   source: string;
+  stageHistory: BillStageHistoryEntry[];
   _days?: number | null;
   _clearedFY?: string | null;
+}
+
+export interface BillStageHistoryEntry {
+  id: string;
+  stage: string;
+  enteredAt: string;
+  source: string;
 }
 
 export interface BudgetRow {
@@ -60,6 +73,7 @@ export interface Transfer {
   id: string;
   recipient: string;
   scopeType: 'program' | 'district' | null;
+  districtFund: 'incentive_funds' | 'consultants_grant' | null;
   purpose: string;
   objectCode: string;
   fiscalYear: string;
@@ -68,10 +82,19 @@ export interface Transfer {
   orderDate: string | null;
   status: TransferStatus;
   utilized: number;
+  utilizations: TransferUtilization[];
   remarks: string | null;
   createdAt: string;
   updatedAt: string;
   history: TransferHistoryEntry[];
+}
+
+export interface TransferUtilization {
+  id: string;
+  amount: number;
+  utilizedAt: string;
+  remarks: string | null;
+  billId: string | null;
 }
 
 export interface TransferHistoryEntry {

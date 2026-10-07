@@ -27,6 +27,7 @@ export default function App() {
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem('mitra-language') === 'mr' ? 'mr' : 'en');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [userSessionChecked, setUserSessionChecked] = useState(false);
+  const [dismissReadOnlyNotice, setDismissReadOnlyNotice] = useState(false);
   const [globalQuery, setGlobalQuery] = useState('');
   const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -100,6 +101,7 @@ export default function App() {
   function logoutUser() {
     sessionStorage.removeItem('mitra-user-session');
     setCurrentUser(null);
+    setDismissReadOnlyNotice(false);
   }
 
   function openSearchResult(result: GlobalSearchResult) {
@@ -109,13 +111,15 @@ export default function App() {
     setSearchOpen(false);
   }
 
+  const BASE_URL = import.meta.env.BASE_URL;
+
   return (
     <AppSettingsContext.Provider value={{ language, t }}>
     <div className="wrap">
       <header>
         <div className="logo">
           {/* <img src="/MITRALogo.svg" alt="MITRA logo" className="logo" /> */}
-          <img src="/favicon3.png" alt="XHiman logo" className="logo" />
+          <img src={`${BASE_URL}favicon3.png`} alt="XHiman logo" className="logo"/>
         </div>
         <div>
           <p className="eyebrow">
@@ -224,9 +228,9 @@ export default function App() {
             tabIndex={0}
             hidden={activeTab !== tab.id}
           >
-            {tab.id === 'bills' && <BillsTab globalQuery={globalQuery} />}
-            {tab.id === 'budget' && <BudgetTab globalQuery={globalQuery} initialFiscalYear={budgetFiscalYear} />}
-            {tab.id === 'transfers' && <TransfersTab globalQuery={globalQuery} />}
+            {tab.id === 'bills' && <BillsTab globalQuery={globalQuery} readOnly={!userSessionChecked || !currentUser} />}
+            {tab.id === 'budget' && <BudgetTab globalQuery={globalQuery} initialFiscalYear={budgetFiscalYear} readOnly={!userSessionChecked || !currentUser} />}
+            {tab.id === 'transfers' && <TransfersTab globalQuery={globalQuery} readOnly={!userSessionChecked || !currentUser} />}
             {tab.id === 'dashboard' && (
               <DashboardTab
                 user={currentUser}
@@ -249,6 +253,18 @@ export default function App() {
         <span className="footer-credit">{t('Made by XHiman')}</span>
       </footer>
     </div>
+    {userSessionChecked && !currentUser && !dismissReadOnlyNotice && (
+      <aside className="read-only-notice" role="status" aria-live="polite">
+        <p>{t('You are not signed in. You can browse records, but must sign in to add or edit entries.')}</p>
+        <button
+          type="button"
+          aria-label={t('Dismiss sign-in notice')}
+          onClick={() => setDismissReadOnlyNotice(true)}
+        >
+          ×
+        </button>
+      </aside>
+    )}
     </AppSettingsContext.Provider>
   );
 }

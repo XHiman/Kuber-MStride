@@ -4,11 +4,21 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FISCAL_YEARS, fmtShort, pct } from '../common/bill-utils';
 
 export type TransferStatus = 'transferred' | 'minutes_awaited';
+export type DistrictFund = 'incentive_funds' | 'consultants_grant';
+
+export interface TransferUtilizationRow {
+  id: string;
+  amount: number;
+  utilizedAt: string;
+  remarks: string | null;
+  billId: string | null;
+}
 
 export interface TransferRow {
   id: string;
   recipient: string;
   scopeType: 'program' | 'district' | null;
+  districtFund: DistrictFund | null;
   purpose: string;
   objectCode: string;
   fiscalYear: string;
@@ -17,6 +27,7 @@ export interface TransferRow {
   orderDate: string | null;
   status: TransferStatus;
   utilized: number;
+  utilizations: TransferUtilizationRow[];
   remarks: string | null;
   createdAt: string;
   updatedAt: string;
@@ -28,7 +39,10 @@ export interface TransferRow {
   }[];
 }
 
-export type TransferInput = Omit<TransferRow, 'id' | 'createdAt' | 'updatedAt' | 'history'>;
+export type TransferInput = Omit<TransferRow, 'id' | 'createdAt' | 'updatedAt' | 'history' | 'utilized' | 'utilizations'> & {
+  utilized?: number;
+  utilizationDate?: string | null;
+};
 
 @Injectable()
 export class TransfersService {
@@ -37,12 +51,16 @@ export class TransfersService {
   async findAll(): Promise<TransferRow[]> {
     const rows = await this.prisma.transfer.findMany({
       orderBy: [{ recipient: 'asc' }, { orderDate: 'desc' }, { createdAt: 'desc' }],
-      include: { history: { orderBy: { changedAt: 'asc' } } },
+      include: {
+        history: { orderBy: { changedAt: 'asc' } },
+        utilizations: { orderBy: [{ utilizedAt: 'asc' }, { createdAt: 'asc' }] },
+      },
     });
     return rows.map(r => ({
       id: r.id,
       recipient: r.recipient,
       scopeType: r.scopeType as 'program' | 'district' | null,
+      districtFund: r.districtFund as DistrictFund | null,
       purpose: r.purpose,
       objectCode: r.objectCode,
       fiscalYear: r.fiscalYear,
@@ -51,6 +69,7 @@ export class TransfersService {
       orderDate: r.orderDate ? r.orderDate.toISOString().split('T')[0] : null,
       status: r.status as TransferStatus,
       utilized: r.utilized,
+      utilizations: r.utilizations.map(entry => this.toUtilizationRow(entry)),
       remarks: r.remarks,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
@@ -66,16 +85,36 @@ export class TransfersService {
   async create(data: TransferInput): Promise<Transfer> {
     this.validateInput(data);
     this.validateDisbursedTransfer(data);
-    if (data.utilized > data.amount) {
+    if (data.scopeType === 'district' && !data.districtFund) {
+      throw new BadRequestException('Choose Incentive Funds or Consultants Grant for a district transfer.');
+    }
+    const initialUtilized = data.utilized || 0;
+    if (initialUtilized > data.amount) {
       throw new BadRequestException('Utilized amount cannot exceed the transferred amount.');
     }
+    if (data.utilizationDate && Number.isNaN(Date.parse(data.utilizationDate))) {
+      throw new BadRequestException('Utilization date must be a valid date.');
+    }
     return this.prisma.$transaction(async (tx) => {
+      const { utilized: _utilized, utilizationDate, ...transferData } = data;
       const transfer = await tx.transfer.create({
         data: {
-          ...data,
+          ...transferData,
+          utilized: 0,
           orderDate: data.orderDate ? new Date(data.orderDate) : null,
         },
       });
+      if (initialUtilized > 0) {
+        await tx.transferUtilization.create({
+          data: {
+            transferId: transfer.id,
+            amount: initialUtilized,
+            utilizedAt: utilizationDate ? new Date(utilizationDate) : new Date(),
+          },
+        });
+        transfer.utilized = initialUtilized;
+        await tx.transfer.update({ where: { id: transfer.id }, data: { utilized: initialUtilized } });
+      }
       await this.applyBudgetImpact(tx, null, transfer);
       await tx.transferHistory.create({
         data: {
@@ -83,6 +122,8 @@ export class TransfersService {
           field: 'record-created',
           newValue: JSON.stringify({
             recipient: transfer.recipient,
+            scopeType: transfer.scopeType,
+            districtFund: transfer.districtFund,
             purpose: transfer.purpose,
             objectCode: transfer.objectCode,
             fiscalYear: transfer.fiscalYear,
@@ -103,6 +144,14 @@ export class TransfersService {
     this.validateInput(data);
     return this.prisma.$transaction(async (tx) => {
       const previous = await tx.transfer.findUniqueOrThrow({ where: { id } });
+      if (Object.prototype.hasOwnProperty.call(data, 'utilized') && data.utilized !== previous.utilized) {
+        throw new BadRequestException('Edit utilization through dated utilization entries instead of changing the total.');
+      }
+      const nextScopeType = data.scopeType ?? previous.scopeType;
+      const nextDistrictFund = data.districtFund === undefined ? previous.districtFund : data.districtFund;
+      if (nextScopeType === 'district' && !nextDistrictFund) {
+        throw new BadRequestException('Choose Incentive Funds or Consultants Grant for a district transfer.');
+      }
       const accountingFieldsChanged = [
         'status',
         'budgetCode',
@@ -121,22 +170,14 @@ export class TransfersService {
             : data.orderDate,
         });
       }
-      if ((data.utilized ?? previous.utilized) > (data.amount ?? previous.amount)) {
-        throw new BadRequestException('Utilized amount cannot exceed the transferred amount.');
+      if (previous.utilized > (data.amount ?? previous.amount)) {
+        throw new BadRequestException('Transferred amount cannot be lower than its utilization total.');
       }
-      if (data.utilized !== undefined) {
-        const linkedBills = await tx.bill.aggregate({
-          where: { transferId: id, cat: 'cleared' },
-          _sum: { amount: true },
-        });
-        if (data.utilized < (linkedBills._sum.amount || 0)) {
-          throw new BadRequestException('Utilized amount cannot be lower than linked cleared bills.');
-        }
-      }
+      const { utilizationDate: _utilizationDate, utilized: _utilized, ...updateData } = data;
       const transfer = await tx.transfer.update({
         where: { id },
         data: {
-          ...data,
+          ...updateData,
           ...(data.orderDate !== undefined && {
             orderDate: data.orderDate ? new Date(data.orderDate) : null,
           }),
@@ -158,6 +199,108 @@ export class TransfersService {
       }
       return transfer;
     });
+  }
+
+  async addUtilization(id: string, data: { amount: number; utilizedAt: string; remarks?: string | null }) {
+    this.validateUtilization(data);
+    return this.prisma.$transaction(async tx => {
+      const transfer = await tx.transfer.findUniqueOrThrow({ where: { id } });
+      const utilized = transfer.utilized + data.amount;
+      if (utilized > transfer.amount) {
+        throw new BadRequestException('Utilization cannot exceed the transferred amount.');
+      }
+      const entry = await tx.transferUtilization.create({
+        data: {
+          transferId: id,
+          amount: data.amount,
+          utilizedAt: new Date(data.utilizedAt),
+          remarks: data.remarks?.trim() || null,
+        },
+      });
+      await tx.transfer.update({ where: { id }, data: { utilized } });
+      await tx.transferHistory.create({
+        data: { transferId: id, field: 'utilized', oldValue: String(transfer.utilized), newValue: String(utilized) },
+      });
+      return this.toUtilizationRow(entry);
+    });
+  }
+
+  async updateUtilization(
+    transferId: string,
+    utilizationId: string,
+    data: { amount: number; utilizedAt: string; remarks?: string | null },
+  ) {
+    this.validateUtilization(data);
+    return this.prisma.$transaction(async tx => {
+      const [transfer, existing] = await Promise.all([
+        tx.transfer.findUniqueOrThrow({ where: { id: transferId } }),
+        tx.transferUtilization.findFirstOrThrow({ where: { id: utilizationId, transferId } }),
+      ]);
+      if (existing.billId) {
+        throw new BadRequestException('Utilization linked to a cleared bill is changed by editing that bill.');
+      }
+      const utilized = transfer.utilized - existing.amount + data.amount;
+      if (utilized > transfer.amount) {
+        throw new BadRequestException('Utilization cannot exceed the transferred amount.');
+      }
+      const entry = await tx.transferUtilization.update({
+        where: { id: utilizationId },
+        data: {
+          amount: data.amount,
+          utilizedAt: new Date(data.utilizedAt),
+          remarks: data.remarks?.trim() || null,
+        },
+      });
+      await tx.transfer.update({ where: { id: transferId }, data: { utilized } });
+      await tx.transferHistory.create({
+        data: { transferId, field: 'utilized', oldValue: String(transfer.utilized), newValue: String(utilized) },
+      });
+      return this.toUtilizationRow(entry);
+    });
+  }
+
+  async removeUtilization(transferId: string, utilizationId: string) {
+    return this.prisma.$transaction(async tx => {
+      const [transfer, existing] = await Promise.all([
+        tx.transfer.findUniqueOrThrow({ where: { id: transferId } }),
+        tx.transferUtilization.findFirstOrThrow({ where: { id: utilizationId, transferId } }),
+      ]);
+      if (existing.billId) {
+        throw new BadRequestException('Utilization linked to a cleared bill is removed by editing that bill.');
+      }
+      const utilized = transfer.utilized - existing.amount;
+      await tx.transferUtilization.delete({ where: { id: utilizationId } });
+      await tx.transfer.update({ where: { id: transferId }, data: { utilized } });
+      await tx.transferHistory.create({
+        data: { transferId, field: 'utilized', oldValue: String(transfer.utilized), newValue: String(utilized) },
+      });
+      return { success: true };
+    });
+  }
+
+  private toUtilizationRow(entry: {
+    id: string;
+    amount: number;
+    utilizedAt: Date;
+    remarks: string | null;
+    billId: string | null;
+  }): TransferUtilizationRow {
+    return {
+      id: entry.id,
+      amount: entry.amount,
+      utilizedAt: entry.utilizedAt.toISOString().split('T')[0],
+      remarks: entry.remarks,
+      billId: entry.billId,
+    };
+  }
+
+  private validateUtilization(data: { amount: number; utilizedAt: string }): void {
+    if (!Number.isFinite(data.amount) || data.amount <= 0) {
+      throw new BadRequestException('Utilization amount must be greater than zero.');
+    }
+    if (!data.utilizedAt || Number.isNaN(Date.parse(data.utilizedAt))) {
+      throw new BadRequestException('Enter a valid utilization date.');
+    }
   }
 
   private historyValue(value: unknown): string | null {
@@ -196,6 +339,9 @@ export class TransfersService {
     }
     if (data.scopeType !== undefined && data.scopeType !== null && !['program', 'district'].includes(data.scopeType)) {
       throw new BadRequestException('Transfer recipient type must be a program or district.');
+    }
+    if (data.districtFund !== undefined && data.districtFund !== null && !['incentive_funds', 'consultants_grant'].includes(data.districtFund)) {
+      throw new BadRequestException('Choose Incentive Funds or Consultants Grant.');
     }
     if (data.amount !== undefined && (!Number.isFinite(data.amount) || data.amount < 0)) {
       throw new BadRequestException('Transfer amount must be a non-negative number.');

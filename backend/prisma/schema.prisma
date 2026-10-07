@@ -12,8 +12,10 @@ model Bill {
   sr        Int?
   vendor    String
   invoice   String
+  efileNumber String?
   date      DateTime?
   amount    Float
+  amountSanctioned Float?
   budgetCode String?
   objectHead String?
   transferId String?
@@ -24,8 +26,12 @@ model Bill {
   objectHeadRef ObjectHead? @relation("BillObjectHead", fields: [objectHead], references: [code])
   transfer Transfer? @relation(fields: [transferId], references: [id])
   assignedUser User? @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+  utilizations TransferUtilization[]
+  stageHistory BillStageHistory[]
   bucket    String
   cat       String
+  onHold    Boolean   @default(false)
+  holdReason String?
   status    String
   attribute String?
   note      String?
@@ -36,6 +42,18 @@ model Bill {
   updatedAt DateTime  @updatedAt
 
   @@map("bills")
+}
+
+model BillStageHistory {
+  id        String   @id @default(cuid())
+  billId    String
+  stage     String
+  enteredAt DateTime @default(now())
+  source    String   @default("tracked")
+  bill      Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  @@index([billId, enteredAt])
+  @@map("bill_stage_history")
 }
 
 model Budget {
@@ -83,6 +101,7 @@ model Transfer {
   id         String    @id @default(cuid())
   recipient  String
   scopeType  String?
+  districtFund String?
   purpose    String
   objectCode String
   amount     Float
@@ -98,6 +117,7 @@ model Transfer {
   updatedAt  DateTime  @updatedAt
   bills      Bill[]
   history    TransferHistory[]
+  utilizations TransferUtilization[]
 
   @@map("transfers")
 }
@@ -127,6 +147,21 @@ model TransferHistory {
 
   @@index([transferId, changedAt])
   @@map("transfer_history")
+}
+
+model TransferUtilization {
+  id         String   @id @default(cuid())
+  transferId String
+  billId     String?  @unique
+  amount     Float
+  utilizedAt DateTime
+  remarks    String?
+  createdAt  DateTime @default(now())
+  transfer   Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  bill       Bill?    @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  @@index([transferId, utilizedAt])
+  @@map("transfer_utilizations")
 }
 
 model District {

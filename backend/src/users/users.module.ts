@@ -7,6 +7,6 @@ import { UserSessionGuard } from './user-session.guard';
 @Module({
   controllers: [UsersController],
   providers: [UsersService, UserAuthService, UserSessionGuard],
-  exports: [UsersService, UserAuthService],
+  exports: [UsersService, UserAuthService, UserSessionGuard],
 })
 export class UsersModule {}
