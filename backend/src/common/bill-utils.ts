@@ -20,6 +20,45 @@ export interface StageResult {
   note: string;
 }
 
+export function normalizeStageBucket(bucket: string | null | undefined): string {
+  const raw = (bucket ?? '').trim();
+  if (!raw) return 'Invoice Raised';
+
+  const key = raw.toLowerCase()
+    .replace(/[_/.-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const aliases: Record<string, string> = {
+    'invoice raised': 'Invoice Raised',
+    'invoice raised pending': 'Invoice Raised',
+    'pmc check': 'PMC Check',
+    'pmc check pending': 'PMC Check',
+    'pmc pending': 'PMC Check',
+    'check by pmc': 'PMC Check',
+    'tfc tec committee approval': 'TFC/TEC Committee Approval',
+    'tfc/tec committee approval': 'TFC/TEC Committee Approval',
+    'tfc tec approval': 'TFC/TEC Committee Approval',
+    'tfc committee approval': 'TFC/TEC Committee Approval',
+    'tfc committee approv': 'TFC/TEC Committee Approval',
+    'tfc approval': 'TFC/TEC Committee Approval',
+    'file approval pending': 'Put Up on File',
+    'file approval': 'Put Up on File',
+    'put up on file': 'Put Up on File',
+    'putting it up on file': 'Put Up on File',
+    'sent to treasury': 'Sent to Treasury',
+    'submitted to treasury': 'Sent to Treasury',
+    'sent to treausary': 'Sent to Treasury',
+    'treasury clearance': 'Treasury Clearance',
+    'clearance by treasury': 'Treasury Clearance',
+    'cleared by treasury': 'Treasury Clearance',
+    'bill passed': 'Treasury Clearance',
+    'bill passed cleared by treasury': 'Treasury Clearance',
+  };
+
+  return aliases[key] ?? raw;
+}
+
 export function classifyStatus(statusRaw: string | null | undefined): StageResult {
   const s = (statusRaw || '').toLowerCase();
   const hasObj = /\bobj/.test(s);

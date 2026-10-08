@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Bill, Prisma } from '@prisma/client';
-import { classifyStatus, daysPending, clearedFYOf, extractClearDate, fiscalYearOf } from '../common/bill-utils';
+import { classifyStatus, daysPending, clearedFYOf, extractClearDate, fiscalYearOf, normalizeStageBucket } from '../common/bill-utils';
 
 export type BillCategory = 'cleared' | 'in_progress' | 'on_hold';
 
@@ -54,13 +54,14 @@ export class BillsService {
 
     return bills.map((b) => ({
       ...b,
+      bucket: normalizeStageBucket(b.bucket),
       date: b.date ? b.date.toISOString().split('T')[0] : null,
       _days: daysPending(b.cat === 'cleared' ? null : b.date),
       _clearedFY: b.clearedFY || clearedFYOf(b.date),
-      effectiveAmount: this.effectiveAmount(b),
+      effectiveAmount: this.effectiveAmount({ ...b, bucket: normalizeStageBucket(b.bucket) }),
       stageHistory: b.stageHistory.map(entry => ({
         id: entry.id,
-        stage: entry.stage,
+        stage: normalizeStageBucket(entry.stage),
         enteredAt: entry.enteredAt.toISOString(),
         source: entry.source,
       })),
@@ -75,13 +76,14 @@ export class BillsService {
     if (!bill) return null;
     return {
       ...bill,
+      bucket: normalizeStageBucket(bill.bucket),
       date: bill.date ? bill.date.toISOString().split('T')[0] : null,
       _days: daysPending(bill.cat === 'cleared' ? null : bill.date),
       _clearedFY: bill.clearedFY || clearedFYOf(bill.date),
-      effectiveAmount: this.effectiveAmount(bill),
+      effectiveAmount: this.effectiveAmount({ ...bill, bucket: normalizeStageBucket(bill.bucket) }),
       stageHistory: bill.stageHistory.map(entry => ({
         id: entry.id,
-        stage: entry.stage,
+        stage: normalizeStageBucket(entry.stage),
         enteredAt: entry.enteredAt.toISOString(),
         source: entry.source,
       })),
@@ -244,7 +246,8 @@ export class BillsService {
   }
 
   private effectiveAmount(bill: Pick<Bill, 'amount' | 'amountSanctioned' | 'bucket'>): number {
-    return bill.bucket === 'Cleared by Treasury' && bill.amountSanctioned !== null
+    const normalizedBucket = normalizeStageBucket(bill.bucket);
+    return normalizedBucket === 'Treasury Clearance' && bill.amountSanctioned !== null
       ? bill.amountSanctioned
       : bill.amount;
   }
@@ -261,8 +264,9 @@ export class BillsService {
     if (!Number.isFinite(amount) || amount < 0) {
       throw new BadRequestException('Sanctioned amount must be a non-negative number.');
     }
-    if (bucket !== 'Cleared by Treasury' && !keepExisting) {
-      throw new BadRequestException('A sanctioned amount can only be entered at Cleared by Treasury.');
+    const normalizedBucket = normalizeStageBucket(bucket);
+    if (normalizedBucket !== 'Treasury Clearance' && !keepExisting) {
+      throw new BadRequestException('A sanctioned amount can only be entered at Treasury Clearance.');
     }
   }
 
@@ -285,10 +289,11 @@ export class BillsService {
 
   private classifyBill(status: string | undefined, bucket?: string) {
     const classified = classifyStatus(status);
-    if (bucket === 'Cleared by Treasury' || classified.cat === 'cleared') {
-      return { ...classified, bucket: 'Cleared by Treasury', cat: 'cleared' as const };
+    const normalizedBucket = normalizeStageBucket(bucket);
+    if (normalizedBucket === 'Treasury Clearance' || classified.cat === 'cleared') {
+      return { ...classified, bucket: 'Treasury Clearance', cat: 'cleared' as const };
     }
-    return { ...classified, bucket: bucket || classified.bucket };
+    return { ...classified, bucket: normalizedBucket || classified.bucket };
   }
 
   private clearanceFiscalYear(status: string): string {
