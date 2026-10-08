@@ -1,4 +1,5 @@
-export const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const defaultApiUrl = import.meta.env.PROD ? '/bill-api' : '';
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || defaultApiUrl).replace(/\/+$/, '');
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const userToken = sessionStorage.getItem('mitra-user-session');
