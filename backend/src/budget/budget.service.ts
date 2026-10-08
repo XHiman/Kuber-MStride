@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { clearedFYOf, FISCAL_YEARS, pct } from '../common/bill-utils';
+import { clearedFYOf, FISCAL_YEARS, normalizeStageBucket, pct } from '../common/bill-utils';
 
 export const TOTAL_FISCAL_YEAR = 'FY Total';
 
@@ -99,16 +99,20 @@ export class BudgetService {
     const grandRelease = totals.rel215 + totals.rel224 + totals.rel233;
     const grandExp = totals.exp215 + totals.exp224 + totals.exp233;
     const bills = await this.prisma.bill.findMany({
-      select: { cat: true, amount: true, clearedFY: true, date: true },
+      select: { cat: true, bucket: true, amount: true, amountSanctioned: true, clearedFY: true, date: true },
     });
-    const cleared = bills.filter((bill) => bill.cat === 'cleared');
+    const cleared = bills.filter((bill) => bill.cat === 'cleared' || normalizeStageBucket(bill.bucket) === 'Cleared by Treasury');
+    const clearedAmount = (bill: typeof bills[number]) =>
+      normalizeStageBucket(bill.bucket) === 'Cleared by Treasury' && bill.amountSanctioned !== null
+        ? bill.amountSanctioned
+        : bill.amount;
     const clearedFYAmt = cleared.reduce((sum, bill) => {
       const billFY = bill.clearedFY || clearedFYOf(bill.date);
-      return sum + (fiscalYear === TOTAL_FISCAL_YEAR || billFY === fiscalYear ? bill.amount : 0);
+      return sum + (fiscalYear === TOTAL_FISCAL_YEAR || billFY === fiscalYear ? clearedAmount(bill) : 0);
     }, 0);
     const otherFYAmt = cleared.reduce((sum, bill) => {
       const billFY = bill.clearedFY || clearedFYOf(bill.date);
-      return sum + (fiscalYear !== TOTAL_FISCAL_YEAR && billFY && billFY !== fiscalYear ? bill.amount : 0);
+      return sum + (fiscalYear !== TOTAL_FISCAL_YEAR && billFY && billFY !== fiscalYear ? clearedAmount(bill) : 0);
     }, 0);
 
     return {

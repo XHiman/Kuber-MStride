@@ -1,6 +1,6 @@
 // Bill stage inference — mirrors the classifyStatus function from the HTML reference.
-// Stage 0 = Invoice Raised (no status), 1 = Invoice Raised, 2 = PMC Check,
-// 3 = TFC/TEC Committee Approval, 4 = Put Up on File, 5 = Sent to Treasury, 6 = Cleared by Treasury
+// Stage 0 = Invoice Raised (no status), 1 = Invoice Raised, 2 = PMC Check Pending,
+// 3 = TFC Committee Approval, 4 = File Approval Pending, 5 = Sent to Treasury, 6 = Cleared by Treasury
 
 export type BillCategory = 'cleared' | 'in_progress' | 'on_hold';
 
@@ -32,28 +32,28 @@ export function normalizeStageBucket(bucket: string | null | undefined): string 
   const aliases: Record<string, string> = {
     'invoice raised': 'Invoice Raised',
     'invoice raised pending': 'Invoice Raised',
-    'pmc check': 'PMC Check',
-    'pmc check pending': 'PMC Check',
-    'pmc pending': 'PMC Check',
-    'check by pmc': 'PMC Check',
-    'tfc tec committee approval': 'TFC/TEC Committee Approval',
-    'tfc/tec committee approval': 'TFC/TEC Committee Approval',
-    'tfc tec approval': 'TFC/TEC Committee Approval',
-    'tfc committee approval': 'TFC/TEC Committee Approval',
-    'tfc committee approv': 'TFC/TEC Committee Approval',
-    'tfc approval': 'TFC/TEC Committee Approval',
-    'file approval pending': 'Put Up on File',
-    'file approval': 'Put Up on File',
-    'put up on file': 'Put Up on File',
-    'putting it up on file': 'Put Up on File',
+    'pmc check': 'PMC Check Pending',
+    'pmc check pending': 'PMC Check Pending',
+    'pmc pending': 'PMC Check Pending',
+    'check by pmc': 'PMC Check Pending',
+    'tfc tec committee approval': 'TFC Committee Approval',
+    'tfc committee approval': 'TFC Committee Approval',
+    'tfc committee approv': 'TFC Committee Approval',
+    'tfc tec approval': 'TFC Committee Approval',
+    'tfc approval': 'TFC Committee Approval',
+    'file approval pending': 'File Approval Pending',
+    'file approvalpending': 'File Approval Pending',
+    'file approval': 'File Approval Pending',
+    'put up on file': 'File Approval Pending',
+    'putting it up on file': 'File Approval Pending',
     'sent to treasury': 'Sent to Treasury',
     'submitted to treasury': 'Sent to Treasury',
     'sent to treausary': 'Sent to Treasury',
-    'treasury clearance': 'Treasury Clearance',
-    'clearance by treasury': 'Treasury Clearance',
-    'cleared by treasury': 'Treasury Clearance',
-    'bill passed': 'Treasury Clearance',
-    'bill passed cleared by treasury': 'Treasury Clearance',
+    'treasury clearance': 'Cleared by Treasury',
+    'clearance by treasury': 'Cleared by Treasury',
+    'cleared by treasury': 'Cleared by Treasury',
+    'bill passed': 'Cleared by Treasury',
+    'bill passed cleared by treasury': 'Cleared by Treasury',
   };
 
   return aliases[key] ?? raw;
@@ -76,25 +76,25 @@ export function classifyStatus(statusRaw: string | null | undefined): StageResul
     return { stage: 5, bucket: 'Sent to Treasury', cat: 'in_progress', note: 'Treasury order issued' };
 
   if (hasObj)
-    return { stage: 4, bucket: 'Put Up on File', cat: 'on_hold', note: 'Filed but objected at district/reviewing level — needs resolution' };
+    return { stage: 4, bucket: 'File Approval Pending', cat: 'on_hold', note: 'Filed but objected at district/reviewing level — needs resolution' };
 
   if (s.indexOf('file submitted') > -1 || s.indexOf('file submited') > -1)
-    return { stage: 4, bucket: 'Put Up on File', cat: 'in_progress', note: 'File submitted, pending treasury submission' };
+    return { stage: 4, bucket: 'File Approval Pending', cat: 'in_progress', note: 'File submitted, pending treasury submission' };
 
   if (s.indexOf('file for submission') > -1)
-    return { stage: 4, bucket: 'Put Up on File', cat: 'in_progress', note: 'TFC approved; file being put up for release' };
+    return { stage: 4, bucket: 'File Approval Pending', cat: 'in_progress', note: 'TFC approved; file being put up for release' };
 
   if (s.indexOf('approved by committee') > -1 || s.indexOf('committee approved') > -1)
-    return { stage: 3, bucket: 'TFC/TEC Committee Approval', cat: 'in_progress', note: 'Approved by committee' };
+    return { stage: 3, bucket: 'TFC Committee Approval', cat: 'in_progress', note: 'Approved by committee' };
 
   if (s.indexOf('iva report is still not received') > -1)
-    return { stage: 2, bucket: 'PMC Check', cat: 'on_hold', note: 'IVA report awaited before PMC can clear' };
+    return { stage: 2, bucket: 'PMC Check Pending', cat: 'on_hold', note: 'IVA report awaited before PMC can clear' };
 
   if (s.indexOf('div comm') > -1 && s.indexOf('not') > -1)
-    return { stage: 2, bucket: 'PMC Check', cat: 'on_hold', note: 'Divisional Commissioner acceptance confirmation awaited' };
+    return { stage: 2, bucket: 'PMC Check Pending', cat: 'on_hold', note: 'Divisional Commissioner acceptance confirmation awaited' };
 
   if (s.indexOf('report awaited') > -1)
-    return { stage: 2, bucket: 'PMC Check', cat: 'on_hold', note: 'Deliverable/MPR report awaited before PMC check' };
+    return { stage: 2, bucket: 'PMC Check Pending', cat: 'on_hold', note: 'Deliverable/MPR report awaited before PMC check' };
 
   if (s.indexOf('received tax invoice') === 0 || s.indexOf('received proforma invoice') === 0 || s.indexOf('received ') === 0)
     return { stage: 1, bucket: 'Invoice Raised', cat: 'in_progress', note: 'Invoice received — PMC check pending' };

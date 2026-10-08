@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizeStageBucket } from '../common/bill-utils';
 
 @Injectable()
 export class UsersService {
@@ -41,16 +42,20 @@ export class UsersService {
           })
         : Promise.resolve([]),
     ]);
-    const pendingBills = bills.filter(bill => bill.cat !== 'cleared');
-    const clearedBills = bills.filter(bill => bill.cat === 'cleared');
+    const isCleared = (bill: typeof bills[number]) =>
+      bill.cat === 'cleared' || normalizeStageBucket(bill.bucket) === 'Cleared by Treasury';
+    const pendingBills = bills.filter(bill => !isCleared(bill));
+    const clearedBills = bills.filter(isCleared);
     const billAmount = (bill: typeof bills[number]) =>
-      bill.bucket === 'Cleared by Treasury' && bill.amountSanctioned !== null
+      normalizeStageBucket(bill.bucket) === 'Cleared by Treasury' && bill.amountSanctioned !== null
         ? bill.amountSanctioned
         : bill.amount;
     return {
       user: this.toProfile(user),
       bills: bills.map(bill => ({
         ...bill,
+        bucket: normalizeStageBucket(bill.bucket),
+        cat: isCleared(bill) ? 'cleared' : bill.cat,
         amount: billAmount(bill),
         effectiveAmount: billAmount(bill),
         date: bill.date ? bill.date.toISOString().split('T')[0] : null,

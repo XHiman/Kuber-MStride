@@ -130,7 +130,7 @@ export interface District {
   remarks: string | null;
 }
 
-export const STAGES = ['Invoice Raised', 'PMC Check Pending', 'TFC Committee Approval', 'File ApprovalPending', 'Sent to Treasury', 'Cleared by Treasury'];
+export const STAGES = ['Invoice Raised', 'PMC Check Pending', 'TFC Committee Approval', 'File Approval Pending', 'Sent to Treasury', 'Cleared by Treasury'];
 export const STAGE_SHORT = ['Invoice raised', 'PMC Check', 'TFC approval', 'File Pending', 'Sent to treasury', 'Treasury clearance'];
 export const STAGE_VAR = ['--stage-1', '--stage-2', '--stage-3', '--stage-4', '--stage-5', '--stage-6'];
 export const PROCESS_LABELS = ['Invoice Raised', 'PMC Check Pending', 'TFC Committee Approval', 'File Approval Pending', 'Sent to Treasury', 'Cleared by Treasury'];

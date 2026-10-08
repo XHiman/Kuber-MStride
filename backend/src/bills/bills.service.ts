@@ -52,20 +52,25 @@ export class BillsService {
       },
     });
 
-    return bills.map((b) => ({
-      ...b,
-      bucket: normalizeStageBucket(b.bucket),
-      date: b.date ? b.date.toISOString().split('T')[0] : null,
-      _days: daysPending(b.cat === 'cleared' ? null : b.date),
-      _clearedFY: b.clearedFY || clearedFYOf(b.date),
-      effectiveAmount: this.effectiveAmount({ ...b, bucket: normalizeStageBucket(b.bucket) }),
-      stageHistory: b.stageHistory.map(entry => ({
-        id: entry.id,
-        stage: normalizeStageBucket(entry.stage),
-        enteredAt: entry.enteredAt.toISOString(),
-        source: entry.source,
-      })),
-    }));
+    return bills.map((b) => {
+      const bucket = normalizeStageBucket(b.bucket);
+      const cat = bucket === 'Cleared by Treasury' ? 'cleared' : b.cat;
+      return {
+        ...b,
+        bucket,
+        cat,
+        date: b.date ? b.date.toISOString().split('T')[0] : null,
+        _days: daysPending(cat === 'cleared' ? null : b.date),
+        _clearedFY: b.clearedFY || clearedFYOf(b.date),
+        effectiveAmount: this.effectiveAmount({ ...b, bucket }),
+        stageHistory: b.stageHistory.map(entry => ({
+          id: entry.id,
+          stage: normalizeStageBucket(entry.stage),
+          enteredAt: entry.enteredAt.toISOString(),
+          source: entry.source,
+        })),
+      };
+    });
   }
 
   async findOne(id: string): Promise<BillWithComputed | null> {
@@ -74,13 +79,16 @@ export class BillsService {
       include: { stageHistory: { orderBy: { enteredAt: 'asc' } } },
     });
     if (!bill) return null;
+    const bucket = normalizeStageBucket(bill.bucket);
+    const cat = bucket === 'Cleared by Treasury' ? 'cleared' : bill.cat;
     return {
       ...bill,
-      bucket: normalizeStageBucket(bill.bucket),
+      bucket,
+      cat,
       date: bill.date ? bill.date.toISOString().split('T')[0] : null,
-      _days: daysPending(bill.cat === 'cleared' ? null : bill.date),
+      _days: daysPending(cat === 'cleared' ? null : bill.date),
       _clearedFY: bill.clearedFY || clearedFYOf(bill.date),
-      effectiveAmount: this.effectiveAmount({ ...bill, bucket: normalizeStageBucket(bill.bucket) }),
+      effectiveAmount: this.effectiveAmount({ ...bill, bucket }),
       stageHistory: bill.stageHistory.map(entry => ({
         id: entry.id,
         stage: normalizeStageBucket(entry.stage),
@@ -95,7 +103,7 @@ export class BillsService {
     Partial<Pick<Bill, 'budgetCode' | 'objectHead' | 'transferId' | 'program' | 'district' | 'assignedUserId' | 'amountSanctioned' | 'onHold' | 'holdReason' | 'efileNumber'>>,
 ): Promise<Bill> {
   const cls = this.classifyBill(data.status, data.bucket);
-  const onHold = data.onHold || data.cat === 'on_hold';
+  const onHold = cls.cat !== 'cleared' && (data.onHold || data.cat === 'on_hold');
   this.validateSanctionedAmount(data.amountSanctioned, cls.bucket);
   this.validateHold(onHold, data.holdReason);
 
@@ -126,15 +134,17 @@ export class BillsService {
 ): Promise<Bill> {
   return this.prisma.$transaction(async (tx) => {
     const previous = await tx.bill.findUniqueOrThrow({ where: { id } });
-    const classification = data.status || data.bucket
-      ? this.classifyBill(data.status ?? previous.status, data.bucket ?? previous.bucket)
-      : { bucket: previous.bucket, cat: (data.cat as BillCategory | undefined) ?? classifyStatus(previous.status).cat as BillCategory };
-    const onHold = data.onHold ?? (previous.onHold || previous.cat === 'on_hold');
+    const classification = this.classifyBill(data.status ?? previous.status, data.bucket ?? previous.bucket);
+    const onHold = classification.cat !== 'cleared' && (data.onHold ?? (previous.onHold || previous.cat === 'on_hold'));
     const holdReason = onHold
       ? (data.holdReason ?? previous.holdReason)?.trim() || null
       : null;
     if (data.amountSanctioned !== undefined) {
-      this.validateSanctionedAmount(data.amountSanctioned, classification.bucket);
+      this.validateSanctionedAmount(
+        data.amountSanctioned,
+        classification.bucket,
+        previous.amountSanctioned !== null && data.amountSanctioned === previous.amountSanctioned,
+      );
     } else if (previous.amountSanctioned !== null) {
       this.validateSanctionedAmount(previous.amountSanctioned, classification.bucket, true);
     }
@@ -247,7 +257,7 @@ export class BillsService {
 
   private effectiveAmount(bill: Pick<Bill, 'amount' | 'amountSanctioned' | 'bucket'>): number {
     const normalizedBucket = normalizeStageBucket(bill.bucket);
-    return normalizedBucket === 'Treasury Clearance' && bill.amountSanctioned !== null
+    return normalizedBucket === 'Cleared by Treasury' && bill.amountSanctioned !== null
       ? bill.amountSanctioned
       : bill.amount;
   }
@@ -265,8 +275,8 @@ export class BillsService {
       throw new BadRequestException('Sanctioned amount must be a non-negative number.');
     }
     const normalizedBucket = normalizeStageBucket(bucket);
-    if (normalizedBucket !== 'Treasury Clearance' && !keepExisting) {
-      throw new BadRequestException('A sanctioned amount can only be entered at Treasury Clearance.');
+    if (normalizedBucket !== 'Cleared by Treasury' && !keepExisting) {
+      throw new BadRequestException('A sanctioned amount can only be entered at Cleared by Treasury.');
     }
   }
 
@@ -289,11 +299,11 @@ export class BillsService {
 
   private classifyBill(status: string | undefined, bucket?: string) {
     const classified = classifyStatus(status);
-    const normalizedBucket = normalizeStageBucket(bucket);
-    if (normalizedBucket === 'Treasury Clearance' || classified.cat === 'cleared') {
-      return { ...classified, bucket: 'Treasury Clearance', cat: 'cleared' as const };
+    const normalizedBucket = bucket ? normalizeStageBucket(bucket) : classified.bucket;
+    if (normalizedBucket === 'Cleared by Treasury' || classified.cat === 'cleared') {
+      return { ...classified, bucket: 'Cleared by Treasury', cat: 'cleared' as const };
     }
-    return { ...classified, bucket: normalizedBucket || classified.bucket };
+    return { ...classified, bucket: normalizedBucket };
   }
 
   private clearanceFiscalYear(status: string): string {
