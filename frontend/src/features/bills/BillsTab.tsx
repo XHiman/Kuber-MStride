@@ -252,7 +252,7 @@ function StageRow({ dashboard }: { dashboard: any }) {
     { key: 'TFC Committee Approval', short: 'TFC approval' },
     { key: 'File Approval Pending', short: 'File Pending' },
     { key: 'Sent to Treasury', short: 'Sent to treasury' },
-    { key: 'Cleared by Treasury', short: 'Cleared by treasury' },
+    { key: 'Cleared by Treasury', short: 'Treasury clearance' },
   ];
 
   const sgs = dashboard?.stages ?? {};
@@ -972,13 +972,13 @@ function BillModal({ bill, onSave, onClose }: { bill: Bill | null; onSave: (data
               type="number"
               min="0"
               step="1"
-              disabled={form.bucket !== 'Treasury Clearance'}
+              disabled={form.bucket !== 'Cleared by Treasury'}
               value={form.amountSanctioned}
               onChange={event => setForm({ ...form, amountSanctioned: event.target.value === '' ? '' : Number(event.target.value) })}
             />
-            <small className="note">{form.bucket === 'Treasury Clearance'
+            <small className="note">{form.bucket === 'Cleared by Treasury'
               ? t('When entered, this becomes the bill amount used in totals; otherwise Amount Raised is used.')
-              : t('Available when the bill reaches Treasury Clearance.')}</small>
+              : t('Available when the bill reaches Cleared by Treasury.')}</small>
           </div>
           <div className="field">
             <label htmlFor="bill-budget-code">{t('Budget code')}</label>
@@ -1077,7 +1077,7 @@ function formatDateTime(value: string): string {
 
 function billAmount(bill: Bill): number {
   return bill.effectiveAmount
-    ?? (bill.bucket === 'Treasury Clearance' && bill.amountSanctioned !== null
+    ?? (bill.bucket === 'Cleared by Treasury' && bill.amountSanctioned !== null
       ? bill.amountSanctioned
       : bill.amount);
 }

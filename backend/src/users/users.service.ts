@@ -44,7 +44,7 @@ export class UsersService {
     const pendingBills = bills.filter(bill => bill.cat !== 'cleared');
     const clearedBills = bills.filter(bill => bill.cat === 'cleared');
     const billAmount = (bill: typeof bills[number]) =>
-      bill.bucket === 'Treasury Clearance' && bill.amountSanctioned !== null
+      bill.bucket === 'Cleared by Treasury' && bill.amountSanctioned !== null
         ? bill.amountSanctioned
         : bill.amount;
     return {

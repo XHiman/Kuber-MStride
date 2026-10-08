@@ -625,7 +625,7 @@ export class AdminService {
     const linkedAmounts = new Map<string, number>();
     for (const bill of bills) {
       if (bill.cat !== 'cleared' || typeof bill.transferId !== 'string') continue;
-      const amount = bill.bucket === 'Treasury Clearance' && typeof bill.amountSanctioned === 'number'
+      const amount = bill.bucket === 'Cleared by Treasury' && typeof bill.amountSanctioned === 'number'
         ? bill.amountSanctioned
         : Number(bill.amount);
       if (!Number.isFinite(amount) || amount <= 0) continue;

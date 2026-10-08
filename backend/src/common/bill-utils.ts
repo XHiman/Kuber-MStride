@@ -1,6 +1,6 @@
 // Bill stage inference — mirrors the classifyStatus function from the HTML reference.
 // Stage 0 = Invoice Raised (no status), 1 = Invoice Raised, 2 = PMC Check,
-// 3 = TFC/TEC Committee Approval, 4 = Put Up on File, 5 = Sent to Treasury, 6 = Treasury Clearance
+// 3 = TFC/TEC Committee Approval, 4 = Put Up on File, 5 = Sent to Treasury, 6 = Cleared by Treasury
 
 export type BillCategory = 'cleared' | 'in_progress' | 'on_hold';
 
@@ -25,7 +25,7 @@ export function classifyStatus(statusRaw: string | null | undefined): StageResul
   const hasObj = /\bobj/.test(s);
 
   if (s.indexOf('bill') > -1 && s.indexOf('passed') > -1 && s.indexOf('to be') === -1)
-    return { stage: 6, bucket: 'Treasury Clearance', cat: 'cleared', note: 'Bill passed / cleared by treasury' };
+    return { stage: 6, bucket: 'Cleared by Treasury', cat: 'cleared', note: 'Bill passed / cleared by treasury' };
 
   if (s.indexOf('to be') > -1 && s.indexOf('passed') > -1)
     return { stage: 5, bucket: 'Sent to Treasury', cat: 'in_progress', note: 'At treasury — clearance date scheduled' };

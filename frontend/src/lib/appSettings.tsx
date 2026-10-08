@@ -17,7 +17,7 @@ const translations: Record<string, string> = {
   'TFC/TEC Committee Approval': 'TFC/TEC समिती मंजुरी',
   'Put Up on File': 'फाईलवर सादर',
   'Sent to Treasury': 'कोषागाराकडे पाठवले',
-  'Treasury Clearance': 'कोषागार मंजुरी',
+  'Cleared by Treasury': 'कोषागार मंजुरी',
   'Object head': 'वस्तू शीर्ष',
   'Total': 'एकूण',
   'Amount released (₹)': 'वितरित रक्कम (₹)',

@@ -244,7 +244,7 @@ export class BillsService {
   }
 
   private effectiveAmount(bill: Pick<Bill, 'amount' | 'amountSanctioned' | 'bucket'>): number {
-    return bill.bucket === 'Treasury Clearance' && bill.amountSanctioned !== null
+    return bill.bucket === 'Cleared by Treasury' && bill.amountSanctioned !== null
       ? bill.amountSanctioned
       : bill.amount;
   }
@@ -261,8 +261,8 @@ export class BillsService {
     if (!Number.isFinite(amount) || amount < 0) {
       throw new BadRequestException('Sanctioned amount must be a non-negative number.');
     }
-    if (bucket !== 'Treasury Clearance' && !keepExisting) {
-      throw new BadRequestException('A sanctioned amount can only be entered at Treasury Clearance.');
+    if (bucket !== 'Cleared by Treasury' && !keepExisting) {
+      throw new BadRequestException('A sanctioned amount can only be entered at Cleared by Treasury.');
     }
   }
 
@@ -285,8 +285,8 @@ export class BillsService {
 
   private classifyBill(status: string | undefined, bucket?: string) {
     const classified = classifyStatus(status);
-    if (bucket === 'Treasury Clearance' || classified.cat === 'cleared') {
-      return { ...classified, bucket: 'Treasury Clearance', cat: 'cleared' as const };
+    if (bucket === 'Cleared by Treasury' || classified.cat === 'cleared') {
+      return { ...classified, bucket: 'Cleared by Treasury', cat: 'cleared' as const };
     }
     return { ...classified, bucket: bucket || classified.bucket };
   }
