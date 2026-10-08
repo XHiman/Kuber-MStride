@@ -130,8 +130,8 @@ export interface District {
   remarks: string | null;
 }
 
-export const STAGES = ['Invoice Raised', 'PMC Check', 'TFC/TEC Committee Approval', 'Put Up on File', 'Sent to Treasury', 'Treasury Clearance'];
-export const STAGE_SHORT = ['Invoice raised', 'PMC check', 'TFC / TEC approval', 'Put up on file', 'Sent to treasury', 'Treasury clearance'];
+export const STAGES = ['Invoice Raised', 'PMC Check Pending', 'TFC Committee Approval', 'File ApprovalPending', 'Sent to Treasury', 'Cleared by Treasury'];
+export const STAGE_SHORT = ['Invoice raised', 'PMC Check', 'TFC approval', 'File Pending', 'Sent to treasury', 'Treasury clearance'];
 export const STAGE_VAR = ['--stage-1', '--stage-2', '--stage-3', '--stage-4', '--stage-5', '--stage-6'];
-export const PROCESS_LABELS = ['Raising of invoice', 'Check by PMC', 'TFC / TEC (Bill) committee approval', 'Putting it up on file', 'Sent to treasury', 'Clearance by treasury'];
+export const PROCESS_LABELS = ['Invoice Raised', 'PMC Check Pending', 'TFC Committee Approval', 'File Approval Pending', 'Sent to Treasury', 'Cleared by Treasury'];
 export const BUDGET_CODE_ORDER = ['01', '06', '10', '11', '13', '14', '16', '17', '21', '24', '26', '27', '28', '31'];

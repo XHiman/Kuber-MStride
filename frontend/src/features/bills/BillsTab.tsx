@@ -204,8 +204,7 @@ function ProcessStrip() {
   return (
     <div className="process-strip">
       {[
-        'Raising of invoice', 'Check by PMC', 'TFC / TEC (Bill) committee approval',
-        'Putting it up on file', 'Sent to treasury', 'Clearance by treasury'
+        'Invoice Raised', 'PMC Check Pending', 'TFC Committee Approval', 'File Approval Pending', 'Sent to Treasury', 'Cleared by Treasury'
       ].map((label, i) => (
         <span key={i} className="p-step">
           <span className="dot" style={{ background: `var(--stage-${i + 1})` }} />
@@ -223,7 +222,7 @@ function StatStrip({ dashboard }: { dashboard: any }) {
   const inProgAmt = dashboard.inProgress.amount;
   const onHoldAmt = dashboard.onHold.amount;
   const sgs = dashboard?.stages ?? {};
-  const midPipeline = (sgs['TFC/TEC Committee Approval']?.amount || 0) + (sgs['Put Up on File']?.amount || 0);
+  const midPipeline = (sgs['TFC Committee Approval']?.amount || 0) + (sgs['File Approval Pending']?.amount || 0);
 
   return (
     <div className="stats">
@@ -249,11 +248,11 @@ function StageRow({ dashboard }: { dashboard: any }) {
   const { t } = useAppSettings();
   const stages = [
     { key: 'Invoice Raised', short: 'Invoice raised' },
-    { key: 'PMC Check', short: 'PMC check' },
-    { key: 'TFC/TEC Committee Approval', short: 'TFC / TEC approval' },
-    { key: 'Put Up on File', short: 'Put up on file' },
+    { key: 'PMC Check Pending', short: 'PMC check' },
+    { key: 'TFC Committee Approval', short: 'TFC approval' },
+    { key: 'File Approval Pending', short: 'File Pending' },
     { key: 'Sent to Treasury', short: 'Sent to treasury' },
-    { key: 'Treasury Clearance', short: 'Treasury clearance' },
+    { key: 'Cleared by Treasury', short: 'Cleared by treasury' },
   ];
 
   const sgs = dashboard?.stages ?? {};
@@ -513,7 +512,7 @@ function Filters({ vendors, search, setSearch, vendorFilter, setVendorFilter, st
       <label className="sr-only" htmlFor="bill-stage-filter">{t('Filter by stage')}</label>
       <select id="bill-stage-filter" value={stageFilter} onChange={e => setStageFilter(e.target.value)}>
         <option value="">{t('All stages')}</option>
-        {['Invoice Raised', 'PMC Check', 'TFC/TEC Committee Approval', 'Put Up on File', 'Sent to Treasury', 'Treasury Clearance'].map(s => <option key={s} value={s}>{t(s)}</option>)}
+        {['Invoice Raised', 'PMC Check Pending', 'TFC Committee Approval', 'File Approval Pending', 'Sent to Treasury', 'Cleared by Treasury'].map(s => <option key={s} value={s}>{t(s)}</option>)}
       </select>
       <label className="sr-only" htmlFor="bill-status-filter">{t('Filter by status')}</label>
       <select id="bill-status-filter" value={catFilter} onChange={e => setCatFilter(e.target.value as BillCategory | '')}>
@@ -712,7 +711,7 @@ function BillHistoryModal({
             <h2 id="history-modal-title">{t('Stage History')}</h2>
             <p id="history-modal-description">{t('Chronological record of this bill’s workflow stages.')}</p>
           </div>
-          <button
+          {/* <button
             ref={closeButtonRef}
             type="button"
             className="btn-icon"
@@ -721,7 +720,7 @@ function BillHistoryModal({
             title={t('Close')}
           >
             ×
-          </button>
+          </button> */}
         </header>
 
         <div className="history-modal-content">
@@ -1086,11 +1085,11 @@ function billAmount(bill: Bill): number {
 function stageClass(bucket: string): string {
   const stages = [
     'Invoice Raised',
-    'PMC Check',
-    'TFC/TEC Committee Approval',
-    'Put Up on File',
+    'PMC Check Pending',
+    'TFC Committee Approval',
+    'File Approval Pending',
     'Sent to Treasury',
-    'Treasury Clearance',
+    'Cleared by Treasury'
   ];
   const stage = stages.indexOf(bucket) + 1;
   return stage > 0 ? `stage-${stage}` : 'stage-1';

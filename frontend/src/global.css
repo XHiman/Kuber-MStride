@@ -3743,6 +3743,14 @@ footer {
     margin-bottom: 12px;
   }
 
+  .admin-records-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
   .admin-record {
     width: 100%;
     display: grid;

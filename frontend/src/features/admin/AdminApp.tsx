@@ -482,6 +482,33 @@ export default function AdminApp() {
     URL.revokeObjectURL(url);
   }
 
+  function downloadTableCsv() {
+    if (!records.length) {
+      setError(`There are no records in ${ENTITIES.find(item => item.id === entity)?.label ?? entity} to download.`);
+      return;
+    }
+
+    const headers = Array.from(new Set(records.flatMap(record => Object.keys(record))));
+    const escape = (value: unknown): string => {
+      if (value === null || value === undefined) return '';
+      const text = Array.isArray(value) || typeof value === 'object' ? JSON.stringify(value) : String(value);
+      return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const csv = [
+      headers.join(','),
+      ...records.map(record => headers.map(column => escape((record as Record<string, unknown>)[column])).join(',')),
+    ].join('\r\n');
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${entity}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setNotice(`${ENTITIES.find(item => item.id === entity)?.label ?? entity} exported as a CSV file.`);
+  }
+
   async function downloadDatabaseBackup() {
     setBusy(true);
     setError('');
@@ -664,7 +691,10 @@ export default function AdminApp() {
               <h2>{ENTITIES.find(item => item.id === entity)?.label}</h2>
               <p className="admin-muted">{records.length} {records.length === 1 ? 'record' : 'records'}</p>
             </div>
-            <button className="btn primary" onClick={() => selectRecord(blankRecord(entity), true)}>+ New</button>
+            <div className="admin-records-actions">
+              <button className="btn" type="button" disabled={busy || !records.length} onClick={downloadTableCsv}>Download CSV</button>
+              <button className="btn primary" onClick={() => selectRecord(blankRecord(entity), true)}>+ New</button>
+            </div>
           </div>
           <label className="admin-record-search">
             <span className="sr-only">Filter records</span>
