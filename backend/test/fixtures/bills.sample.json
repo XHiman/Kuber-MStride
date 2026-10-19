@@ -1,0 +1,8 @@
+[
+  { "vendor": "DSU Alpha", "bucket": "Cleared by Treasury", "cat": "cleared", "effectiveAmount": 5000000, "_days": null },
+  { "vendor": "DSU Alpha", "bucket": "Invoice Raised", "cat": "in_progress", "effectiveAmount": 1250000.5, "_days": 200 },
+  { "vendor": "Vendor Beta", "bucket": "TFC Committee Approval", "cat": "in_progress", "effectiveAmount": 300000, "_days": 45 },
+  { "vendor": "Vendor Beta", "bucket": "File Approval Pending", "cat": "on_hold", "effectiveAmount": 75000, "_days": 400 },
+  { "vendor": "Vendor Gamma", "bucket": "Sent to Treasury", "cat": "in_progress", "effectiveAmount": 53880, "_days": null },
+  { "vendor": "Vendor Gamma", "bucket": "Cleared by Treasury", "cat": "cleared", "effectiveAmount": 25146, "_days": null }
+]

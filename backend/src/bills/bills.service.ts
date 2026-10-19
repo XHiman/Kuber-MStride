@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Bill, Prisma } from '@prisma/client';
 import { classifyStatus, daysPending, clearedFYOf, extractClearDate, fiscalYearOf, normalizeStageBucket } from '../common/bill-utils';
+import { aggregateBills } from '../common/bill-stats';
 
 export type BillCategory = 'cleared' | 'in_progress' | 'on_hold';
 
@@ -323,45 +324,6 @@ export class BillsService {
 
   // Dashboard aggregation
   async getDashboardStats() {
-    const bills = await this.findAll();
-    const total = bills.reduce((s, b) => s + b.effectiveAmount, 0);
-    const cleared = bills.filter(b => b.cat === 'cleared');
-    const onHold = bills.filter(b => b.cat === 'on_hold');
-    const inProgress = bills.filter(b => b.cat === 'in_progress');
-
-    // Stage aggregation
-    const stages: Record<string, { amount: number; count: number; onHold: number }> = {};
-    for (const b of bills) {
-      if (!stages[b.bucket]) stages[b.bucket] = { amount: 0, count: 0, onHold: 0 };
-      stages[b.bucket].amount += b.effectiveAmount;
-      stages[b.bucket].count += 1;
-      if (b.cat === 'on_hold') stages[b.bucket].onHold += 1;
-    }
-
-    // Vendor aggregation
-    const vendors: Record<string, { cleared: number; in_progress: number; on_hold: number; total: number; count: number }> = {};
-    for (const b of bills) {
-      if (!vendors[b.vendor]) vendors[b.vendor] = { cleared: 0, in_progress: 0, on_hold: 0, total: 0, count: 0 };
-      const v = vendors[b.vendor];
-      v.total += b.effectiveAmount;
-      v.count += 1;
-      v[b.cat] += b.effectiveAmount;
-    }
-
-    // Oldest pending
-    const pending = bills
-      .filter(b => b.cat !== 'cleared' && b.cat !== 'on_hold' && b._days !== null && b._days >= 0)
-      .sort((a, c) => (c._days || 0) - (a._days || 0));
-    const oldest = pending[0];
-
-    return {
-      total,
-      cleared: { amount: cleared.reduce((s, b) => s + b.effectiveAmount, 0), count: cleared.length },
-      inProgress: { amount: inProgress.reduce((s, b) => s + b.effectiveAmount, 0), count: inProgress.length },
-      onHold: { amount: onHold.reduce((s, b) => s + b.effectiveAmount, 0), count: onHold.length },
-      stages,
-      vendors,
-      oldestPending: oldest ? { vendor: oldest.vendor, days: oldest._days, amount: oldest.effectiveAmount } : null,
-    };
+    return aggregateBills(await this.findAll());
   }
 }

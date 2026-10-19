@@ -10,6 +10,7 @@ Thumbs.db
 favicon2.png
 favicon.svg
 .env
+PLAN.md
 .env.*
 !.env.example
 .env.production-api
@@ -21,3 +22,6 @@ backend/prisma/*.db-*
 backend/prisma/*.sqlite
 backend/prisma/*.sqlite-*
 backend/prisma/*backup*.json
+
+# Real-data test fixtures (never commit)
+*.local.json
