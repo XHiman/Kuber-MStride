@@ -78,3 +78,5 @@ for (const r of results) {
 console.log(`axe: ${total} failing node(s) across ${results.length} scans`);
 for (const r of reflow) console.log(`reflow ${r.label} · ${r.tab}: ${r.scroll ? 'HORIZONTAL SCROLL ' + r.offenders.join(', ') : 'ok'}`);
 if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ results, reflow }, null, 2));
+// Fail the run (for CI / pre-release checks) on any axe violation or horizontal page scroll.
+if (total > 0 || reflow.some(r => r.scroll)) process.exitCode = 1;

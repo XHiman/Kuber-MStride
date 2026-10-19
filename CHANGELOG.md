@@ -2,6 +2,12 @@
 
 One entry per step of the UX / trust improvement plan.
 
+## Step 12 — Tests and documentation
+- **Tests:** `npm test` runs 89 Vitest unit and component tests: 23 backend, 66 frontend. They cover totals, percentages, stage sums, aging buckets, vendor normalisation, formats, reason codes, scope and roles, the audit trail, masking, research input, the register logic, the drawer, toasts, Undo and Feedback.
+- **Accessibility and language checks:** `npm run test:a11y` (axe in both themes plus reflow at 360 px and 200 % zoom) and `npm run test:i18n` (Marathi coverage) now exit non-zero on any regression. Final run: 0 axe failures, 0 reflow failures, 0 untranslated strings.
+- **README** has new sections: status glossary, data format, roles, research hooks, tests and audits, an updated repository map and API table, and known limitations.
+- **Deliverables:** `SCREENSHOTS/before` and `SCREENSHOTS/after` (16 each: light/dark × desktop/mobile × 4 tabs, from the same data source), plus `CASE_STUDY.md`, a portfolio-ready summary of the problem, principles, changes, trade-offs and evaluation plan.
+
 ## Step 11 — Research hooks (HCI portfolio)
 - **Anonymised usage log, OFF by default.** It records only when the frontend is built with `VITE_RESEARCH_LOG=true` **and** the server sets `RESEARCH_LOG_ENABLED=true` (added to `.env.example` as `false`). With either flag off it is a no-op: nothing is queued or sent. Logged events:
   - page views, with theme, language and viewport width

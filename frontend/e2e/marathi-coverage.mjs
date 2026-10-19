@@ -32,3 +32,4 @@ const missing = (await page.evaluate(() => [...(window.__missingMr ?? [])].sort(
 console.log(`${missing.length} untranslated string(s):`);
 for (const text of missing) console.log(`  ${JSON.stringify(text)}`);
 await browser.close();
+if (missing.length) process.exitCode = 1;
