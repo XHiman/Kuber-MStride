@@ -5167,3 +5167,57 @@ footer {
   min-height: 84px;
   box-sizing: border-box;
 }
+
+/* ── Accessibility: WCAG 2.1 AA contrast (Step 9) ──
+   Measured with axe-core in both themes. Muted text must reach 4.5:1 on every surface it sits on,
+   including the tinted ones (accent-soft #e8f1fc, critical-soft #fce9e7, surface-3 #e9e9e4). */
+:root {
+  --text-muted: #62625c;   /* was #73736d: 4.07–4.44:1 on tinted surfaces → now ≥ 5.0:1 */
+  --accent-hint: #6a4cc0;  /* was #997fde: 3.0:1 as eyebrow text → 5.7:1 */
+}
+:root[data-theme="dark"] {
+  --text-disabled: #8a8a83; /* was #686862: 3.5:1 on the page → 5.2:1+ */
+}
+.footer-credit {
+  color: var(--text-muted);
+}
+/* White on the dark-theme accent (#4a94e8) is only 3.1:1; use near-black ink on accent fills instead (6.0:1). */
+:root[data-theme="dark"] .btn.primary,
+:root[data-theme="dark"] .tabs button.active .tab-index {
+  color: #0b1220;
+}
+
+/* ── Accessibility: focus and motion (Step 9) ── */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Reflow at 360 px / 200 % zoom (Step 9) ──
+   Grid items default to min-width: auto and grew to their table's width (850 px on a 360 px screen).
+   Constrain the track so wide tables scroll inside their own .table-scroll instead of the page. */
+.district-transfer-sections {
+  grid-template-columns: minmax(0, 1fr);
+}
+.district-transfer-sections > .transfer-category-panel {
+  min-width: 0;
+}
+/* Mobile tab bar: let labels wrap to two lines instead of clipping ("…lls pipeline"). */
+@media (max-width: 680px) {
+  .tabs .tab-label {
+    overflow: visible;
+    white-space: normal;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+}

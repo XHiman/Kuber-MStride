@@ -95,9 +95,10 @@ export function ReasonBadges({ bill, max = 2 }: { bill: Bill; max?: number }) {
  * except for `reference` fields (invoice numbers), which are codes rather than personal data.
  */
 export function RecordedText({ value, empty = '—', reference = false }: { value: string | null | undefined; empty?: string; reference?: boolean }) {
-  const { t } = useAppSettings();
+  const { t, language } = useAppSettings();
   const shown = reference ? value : maskAccountNumbers(value);
-  if (!isPlaceholder(shown)) return <>{shown?.trim() || empty}</>;
+  // Recorded text is English data; mark it inside the Marathi UI.
+  if (!isPlaceholder(shown)) return shown?.trim() ? <span lang={language === 'mr' ? 'en' : undefined}>{shown.trim()}</span> : <>{empty}</>;
   const rest = placeholderRemainder(shown);
   return (
     <>

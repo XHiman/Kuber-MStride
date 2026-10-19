@@ -10,6 +10,14 @@
     <link rel="icon" type="image/x-icon" href="%BASE_URL%favicon3.png">
   </head>
   <body>
+    <script>
+      // Apply the saved or system theme before first paint (no light flash in dark mode).
+      try {
+        var pref = localStorage.getItem('mitra-theme');
+        var dark = pref === 'dark' || (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      } catch (e) {}
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/index.tsx"></script>
   </body>

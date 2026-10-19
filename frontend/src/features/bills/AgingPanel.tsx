@@ -74,7 +74,7 @@ export default function AgingPanel({ bills, asOf, threshold, onThresholdChange, 
         })}
       </div>
 
-      <div className="table-scroll pending-bills-scroll">
+      <div className="table-scroll pending-bills-scroll" tabIndex={0} role="region" aria-label={t('Open bills, oldest first')}>
         <table>
           <caption className="sr-only">
             {t('Open bills, oldest first')}{bucketFilter ? ` · ${t(AGING_BUCKETS.find(b => b.id === bucketFilter)!.label)}` : ''}

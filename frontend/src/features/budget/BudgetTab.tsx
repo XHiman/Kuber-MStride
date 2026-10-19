@@ -79,7 +79,7 @@ export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnl
   const budgetHeads = new Map(
     (budget.budgetHeads || []).map((head: { code: string; name: string }) => [head.code, head.name]),
   );
-  const headLabel = (code: string, fallback: string) => budgetHeads.get(code) || fallback;
+  const headLabel = (code: string, fallback: string) => t(String(budgetHeads.get(code) || fallback));
   const budgetGroups = [
     { key: '215', label: 'A215' },
     { key: '224', label: 'A224' },
@@ -293,6 +293,7 @@ function collapsedSummary(
             <label className="note">
               <div className="field" style={{marginBottom: 0}}>
                 <select
+                  aria-label={t('Fiscal year')}
                   value={fiscalYear}
                   disabled={saving || pendingEdits.size > 0}
                   onChange={event => setFiscalYear(event.target.value)}

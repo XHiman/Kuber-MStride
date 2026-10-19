@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react';
 
 export type Language = 'en' | 'mr';
 export type Theme = 'light' | 'dark';
+export type ThemePreference = Theme | 'system';
 
 type AppSettings = {
   language: Language;
@@ -14,6 +15,57 @@ const translations: Record<string, string> = {
   'Financial workspaces': 'आर्थिक कार्यक्षेत्रे',
   // Step 1 — status language. TODO: review Marathi wording with a native speaker.
   'What do these mean?': 'याचा अर्थ काय?',
+  // Step 9 — Marathi coverage gaps found by e2e/marathi-coverage.mjs. TODO: review Marathi wording.
+  'DSU': 'DSU',
+  "A project by Sandesh & XHiman": "Sandesh & XHiman यांचा प्रकल्प",
+  "A215 Balance": "A215 शिल्लक",
+  "A215 Expenditure": "A215 खर्च",
+  "A215 Provision": "A215 तरतूद",
+  "A224 Balance": "A224 शिल्लक",
+  "A224 Expenditure": "A224 खर्च",
+  "A224 Provision": "A224 तरतूद",
+  "A233 Balance": "A233 शिल्लक",
+  "A233 Expenditure": "A233 खर्च",
+  "A233 Provision": "A233 तरतूद",
+  "All vendors": "सर्व विक्रेते",
+  "Assigned person": "नियुक्त व्यक्ती",
+  "Balance remaining\n\n": "उर्वरित शिल्लक\n\n",
+  "Total expenditure to date\n\n": "आजपर्यंतचा एकूण खर्च\n\n",
+  "Bills that need action": "कारवाई आवश्यक असलेली बिले",
+  "Checking your sign-in…": "तुमचे साइन-इन तपासत आहे…",
+  "Clear filters": "फिल्टर काढा",
+  "Consultants Grant": "सल्लागार अनुदान",
+  "Copy export": "निर्यात कॉपी करा",
+  "Dashboard": "डॅशबोर्ड",
+  "Dismiss sign-in notice": "साइन-इन सूचना बंद करा",
+  "District transfers grouped by fund category": "निधी प्रकारानुसार जिल्हा हस्तांतरणे",
+  "Filter by stage": "टप्प्यानुसार गाळा",
+  "Filter by status": "स्थितीनुसार गाळा",
+  "Filter by vendor": "विक्रेत्यानुसार गाळा",
+  "Follow your device setting": "तुमच्या उपकरणाच्या सेटिंगनुसार",
+  "Incentive Funds": "प्रोत्साहन निधी",
+  "Linked cleared bills update this transfer’s utilization total; dated utilization entries are stored under their transfer.": "जोडलेली मंजूर बिले या हस्तांतरणाचा वापर अद्ययावत करतात; दिनांकित वापर नोंदी त्या हस्तांतरणाखाली जतन होतात.",
+  "No transfers recorded in this section yet.": "या विभागात अद्याप हस्तांतरणे नोंदवलेली नाहीत.",
+  "Password": "पासवर्ड",
+  "Personal dashboard": "वैयक्तिक डॅशबोर्ड",
+  "Search all records": "सर्व नोंदी शोधा",
+  "Search bills": "बिले शोधा",
+  "Search bills, budgets, transfers, districts, people…": "बिले, अंदाजपत्रक, हस्तांतरणे, जिल्हे, व्यक्ती शोधा…",
+  "Sign in": "साइन इन करा",
+  "Sign in with the username and password provided by your administrator.": "प्रशासकाने दिलेले वापरकर्तानाव आणि पासवर्ड वापरून साइन इन करा.",
+  "System": "प्रणाली",
+  "Total balance": "एकूण शिल्लक",
+  "Transfers": "हस्तांतरणे",
+  "Untagged district transfers": "वर्गीकरण न केलेली जिल्हा हस्तांतरणे",
+  "Username": "वापरकर्तानाव",
+  "You are not signed in. You can browse records, but must sign in to add or edit entries.": "तुम्ही साइन इन केलेले नाही. नोंदी पाहू शकता, पण जोडण्यासाठी किंवा संपादित करण्यासाठी साइन इन करा.",
+  "of release": "मुक्त रकमेपैकी",
+  // Backend error messages (shown verbatim in English when no entry exists).
+  'A sanctioned amount can only be entered at Cleared by Treasury.': 'मंजूर रक्कम फक्त ‘कोषागाराकडून मंजूर’ टप्प्यावरच नोंदवता येते.',
+  'Cleared bill exceeds the remaining amount on its linked transfer.': 'मंजूर बिल जोडलेल्या हस्तांतरणातील उर्वरित रकमेपेक्षा जास्त आहे.',
+  'Enter a remark explaining why the bill is on hold.': 'बिल का रोखले आहे याचा शेरा नोंदवा.',
+  'Sanctioned amount must be a non-negative number.': 'मंजूर रक्कम शून्य किंवा त्याहून अधिक असावी.',
+  'Sign in to view your dashboard.': 'डॅशबोर्ड पाहण्यासाठी साइन इन करा.',
   // Step 8 — trust and audit. TODO: review Marathi wording.
   'Last updated': 'शेवटचा बदल',
   'Loaded': 'लोड केले',
@@ -463,6 +515,13 @@ export function useAppSettings() {
   return useContext(AppSettingsContext);
 }
 
+/** Dev-only: Marathi strings that fell back to English, for the coverage audit (window.__missingMr). */
+const missing = new Set<string>();
+if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __missingMr: Set<string> }).__missingMr = missing;
+
 export function translate(text: string, language: Language): string {
-  return language === 'mr' ? (translations[text] ?? text) : text;
+  if (language !== 'mr') return text;
+  const translated = translations[text];
+  if (translated === undefined && import.meta.env.DEV && /[A-Za-z]{2}/.test(text)) missing.add(text);
+  return translated ?? text;
 }

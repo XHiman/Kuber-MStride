@@ -2,6 +2,16 @@
 
 One entry per step of the UX / trust improvement plan.
 
+## Step 9 — Accessibility (WCAG 2.1 AA)
+- New audit script `frontend/e2e/a11y-audit.mjs` runs axe-core (WCAG 2.0/2.1 A + AA) on all four tabs, the glossary dialog and the bill drawer, in **light and dark**, and checks for horizontal page scroll at **360 px** and at **200 % zoom**. Baseline: **252 failing nodes** and 2 reflow failures. After this step: **0 / 0**.
+- Contrast is fixed at the token level: light `--text-muted` #73736d → #62625c (≥ 5.0:1 on every surface, including the tinted accent and critical backgrounds); the eyebrow purple #997fde → #6a4cc0 (5.7:1); dark `--text-disabled` #686862 → #8a8a83; the footer credit uses muted text; and dark-theme accent fills (primary buttons, active tab number) use near-black ink, because white on #4a94e8 was only 3.1:1.
+- ARIA: the global search input is now a proper `combobox` (it had `aria-expanded` without a role). The scrollable Needs action list and aging table are keyboard-focusable named regions. The budget fiscal-year select has an accessible name.
+- A global `:focus-visible` ring applies to every interactive element. `prefers-reduced-motion` turns off animations, transitions and smooth scrolling site-wide.
+- Theme: **System / Light / Dark**, defaulting to System. The page follows OS changes live, a manual choice is remembered, and an inline script applies the theme before first paint so dark mode doesn't flash light.
+- Reflow: the district transfer grid grew to its table's width (850 px on a 360 px screen); its grid track is now `minmax(0, 1fr)`. The mobile tab bar wraps labels instead of clipping them.
+- Language: new `frontend/e2e/marathi-coverage.mjs` walks every tab and overlay in Marathi and lists `t()` strings that fell back to English (instrumented in dev builds only). 51 gaps filled, now **0**. Budget head names and known backend error messages are translated. English data inside the Marathi UI (vendor names, recorded status text) carries `lang="en"`, and the language buttons carry their own `lang`.
+- Known limits: text written directly in JSX without `t()` is not caught by the coverage script. All new Marathi strings are marked TODO for native-speaker review. Automated checks don't replace a screen-reader pass with NVDA or TalkBack.
+
 ## Step 8 — Trust, audit and history
 - **Who / when / why**: migration `20261019130000_bill_history_audit` adds `changedById`, `changedByName` and `note` to `bill_stage_history`. Existing rows stay empty and show as "not recorded". The signed-in user (taken from the session, not the request body) is stored with a snapshot of their name, so history survives user deletion. Changes made in the admin panel are attributed to "Administrator (admin panel)". Admin backups and restores carry the new columns.
 - Events (`backend/src/bills/bill-history.ts`, tested): `created`, `tracked` (stage move), and new `hold` / `release` events, so taking a bill off hold is recorded too. Legacy spellings of the same stage do not create false moves, and an edit that changes neither stage nor hold adds no history row. Notes are trimmed, capped at 500 characters and optional (A4). Only `tracked` counts toward "moved this month".

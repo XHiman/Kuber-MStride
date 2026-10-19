@@ -64,8 +64,10 @@ export function EmptyState({ title, detail }: { title: string; detail: string })
 
 /** Normalised vendor name; the raw spelling stays available in the tooltip when it differs. */
 export function VendorName({ vendor }: { vendor: string }) {
-  const { t } = useAppSettings();
+  const { t, language } = useAppSettings();
   const name = normaliseVendor(vendor).name;
-  if (name === vendor) return <>{vendor}</>;
-  return <span className="vendor-normalised" title={`${t('Recorded as')}: ${vendor}`}>{name}</span>;
+  // Vendor names are English data; mark them so screen readers switch voice inside the Marathi UI.
+  const lang = language === 'mr' ? 'en' : undefined;
+  if (name === vendor) return <span lang={lang}>{vendor}</span>;
+  return <span className="vendor-normalised" lang={lang} title={`${t('Recorded as')}: ${vendor}`}>{name}</span>;
 }

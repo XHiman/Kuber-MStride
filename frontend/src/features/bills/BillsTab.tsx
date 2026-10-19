@@ -76,7 +76,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
       await apiClient.bills.update(bill.id, { assignedUserId });
       await load();
     } catch (error) {
-      alert(error instanceof Error ? error.message : t('Could not assign the bill.'));
+      alert(error instanceof Error ? t(error.message) : t('Could not assign the bill.'));
     }
   }
 
@@ -383,7 +383,7 @@ function BillModal({ bill, onSave, onClose }: { bill: Bill | null; onSave: (data
         changeNote: changeNote.trim() || undefined,
       });
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : t('Failed to save bill. Please try again.'));
+      setSaveError(error instanceof Error ? t(error.message) : t('Failed to save bill. Please try again.'));
     } finally {
       setSaving(false);
     }

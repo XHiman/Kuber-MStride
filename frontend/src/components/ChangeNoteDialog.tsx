@@ -35,7 +35,7 @@ export default function ChangeNoteDialog({ title, description, confirmLabel, onC
     try {
       await onConfirm(note.trim());
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('Could not save the change.'));
+      setError(failure instanceof Error ? t(failure.message) : t('Could not save the change.'));
       setBusy(false);
     }
   }

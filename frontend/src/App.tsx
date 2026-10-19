@@ -3,7 +3,7 @@ import BillsTab from './features/bills/BillsTab';
 import BudgetTab from './features/budget/BudgetTab';
 import TransfersTab from './features/transfers/TransfersTab';
 import DashboardTab from './features/dashboard/DashboardTab';
-import { AppSettingsContext, translate, type Language, type Theme } from './lib/appSettings';
+import { AppSettingsContext, translate, type Language, type Theme, type ThemePreference } from './lib/appSettings';
 import { apiClient } from './lib/api';
 import { formatDateTime } from './lib/format';
 import type { GlobalSearchResult, UserProfile } from './types';
@@ -19,12 +19,15 @@ const tabs: { id: Tab; label: string; detail: string }[] = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('bills');
-  const [theme, setTheme] = useState<Theme>(() => {
-    const savedTheme = localStorage.getItem('mitra-theme');
-    return savedTheme === 'dark' || savedTheme === 'light'
-      ? savedTheme
-      : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // Theme preference: follow the OS by default ("system"); Light/Dark are manual overrides.
+  const [themePref, setThemePref] = useState<ThemePreference>(() => {
+    try {
+      const saved = localStorage.getItem('mitra-theme');
+      return saved === 'dark' || saved === 'light' ? saved : 'system';
+    } catch { return 'system'; }
   });
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const theme: Theme = themePref === 'system' ? (systemDark ? 'dark' : 'light') : themePref;
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem('mitra-language') === 'mr' ? 'mr' : 'en');
   const [exactAmounts, setExactAmounts] = useState(() => localStorage.getItem('mitra-exact-amounts') === '1');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -43,9 +46,19 @@ export default function App() {
   const t = (text: string) => translate(text, language);
 
   useEffect(() => {
+    const query = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem('mitra-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    try { localStorage.setItem('mitra-theme', themePref); } catch { /* storage unavailable */ }
+  }, [themePref]);
 
   useEffect(() => {
     localStorage.setItem('mitra-exact-amounts', exactAmounts ? '1' : '0');
@@ -158,9 +171,18 @@ export default function App() {
           <div className="setting-group" role="group" aria-label={t('Appearance')}>
             <span>{t('Appearance')}</span>
             <div className="setting-switch">
-              <button type="button" className="btn setting-btn" aria-label={t(theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode')} aria-pressed={theme === 'dark'} onClick={() => setTheme(value => value === 'light' ? 'dark' : 'light')}>
-                <span aria-hidden="true">{theme === 'dark' ? '☾' : '☼'}</span> {t(theme === 'dark' ? 'Dark' : 'Light')}
-              </button>
+              {([['system', '◐', 'System'], ['light', '☼', 'Light'], ['dark', '☾', 'Dark']] as const).map(([value, icon, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`btn setting-btn ${themePref === value ? 'selected' : ''}`}
+                  aria-pressed={themePref === value}
+                  title={value === 'system' ? t('Follow your device setting') : undefined}
+                  onClick={() => setThemePref(value)}
+                >
+                  <span aria-hidden="true">{icon}</span> {t(label)}
+                </button>
+              ))}
             </div>
           </div>
           <div className="setting-group" role="group" aria-label={t('Amounts')}>
@@ -174,8 +196,8 @@ export default function App() {
           <div className="setting-group" role="group" aria-label={t('Language')}>
             <span>{t('Language')}</span>
             <div className="setting-switch">
-              <button type="button" className={`btn setting-btn ${language === 'en' ? 'selected' : ''}`} aria-pressed={language === 'en'} onClick={() => setLanguage('en')}>English</button>
-              <button type="button" className={`btn setting-btn ${language === 'mr' ? 'selected' : ''}`} aria-pressed={language === 'mr'} onClick={() => setLanguage('mr')}>मराठी</button>
+              <button type="button" className={`btn setting-btn ${language === 'en' ? 'selected' : ''}`} aria-pressed={language === 'en'} onClick={() => setLanguage('en')} lang="en">English</button>
+              <button type="button" className={`btn setting-btn ${language === 'mr' ? 'selected' : ''}`} aria-pressed={language === 'mr'} onClick={() => setLanguage('mr')} lang="mr">मराठी</button>
             </div>
           </div>
         </div>
@@ -194,7 +216,10 @@ export default function App() {
             if (event.key === 'Enter' && searchResults[0]) openSearchResult(searchResults[0]);
           }}
           placeholder={t('Search bills, budgets, transfers, districts, people…')}
-          aria-expanded={searchOpen}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
+          aria-expanded={searchOpen && globalQuery.trim().length >= 2}
           aria-controls="global-search-results"
         />
         {searchOpen && globalQuery.trim().length >= 2 && (

@@ -33,7 +33,7 @@ export default function NeedsActionPanel({ bills, users, asOf, threshold, readOn
         <h2>{t('Needs action')}</h2>
         <span className="note">{items.length} {t(plural(items.length, 'bill'))} · {heldCount} {t('on hold')} · <AsOf at={asOf} /></span>
       </div>
-      <ul className="exception-scroll action-list">
+      <ul className="exception-scroll action-list" tabIndex={0} aria-label={t('Bills that need action')}>
         {items.map(b => (
           <ActionCard key={b.id} bill={b} users={users} threshold={threshold} readOnly={readOnly} onEdit={onEdit} onAssign={onAssign} onResolveHold={onResolveHold} />
         ))}
