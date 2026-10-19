@@ -15,13 +15,23 @@ import type { Request, Response } from 'express';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminService, AdminEntity } from './admin.service';
 import { AdminSessionGuard } from './admin-session.guard';
+import { ResearchService } from '../research/research.service';
 
 @Controller('adminX/api')
 export class AdminController {
   constructor(
     private readonly auth: AdminAuthService,
     private readonly admin: AdminService,
+    private readonly research: ResearchService,
   ) {}
+
+  /** Anonymised usage events and feedback for the UX case study. Admin only. */
+  @Get('research')
+  @UseGuards(AdminSessionGuard)
+  researchExport(@Res({ passthrough: true }) response: Response) {
+    response.setHeader('Cache-Control', 'no-store');
+    return this.research.export();
+  }
 
   @Post('login')
   login(

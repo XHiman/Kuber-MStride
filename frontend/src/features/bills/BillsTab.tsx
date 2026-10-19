@@ -14,6 +14,7 @@ import Register from './Register';
 import ChangeNoteDialog from '../../components/ChangeNoteDialog';
 import { LoadError, Skeleton } from '../../components/LoadState';
 import { useToast } from '../../components/Toast';
+import { research } from '../../lib/research';
 import { billRef } from './shared';
 import VendorChart from './VendorChart';
 
@@ -69,6 +70,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
       const message = error instanceof Error ? error.message : 'Could not load the data';
       setLoadError(message);
       setLoadState('error');
+      research.track('error', 'bills', { kind: 'load' });
       // With data already on screen, keep it and report the failed refresh instead of blanking the page.
       if (dashboard) toast(`${t('Could not refresh bills')}: ${t(message)}`, { kind: 'error', action: { label: t('Retry'), onAction: load } });
       return;
@@ -101,6 +103,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
             await load();
             toast(t('Change undone'), { kind: 'info' });
           } catch (error) {
+            research.track('error', 'bills', { kind: 'undo' });
             toast(error instanceof Error ? t(error.message) : t('Could not undo the change.'), { kind: 'error' });
           }
         },
@@ -114,6 +117,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
       await changeWithUndo(bill, { assignedUserId }, { assignedUserId: bill.assignedUserId },
         name ? `${billRef(bill)} ${t('assigned to')} ${name}` : `${billRef(bill)} ${t('unassigned')}`);
     } catch (error) {
+      research.track('error', 'bills', { kind: 'assign' });
       toast(error instanceof Error ? t(error.message) : t('Could not assign the bill.'), { kind: 'error' });
     }
   }

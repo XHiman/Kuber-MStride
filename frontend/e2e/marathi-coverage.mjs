@@ -23,6 +23,9 @@ await page.locator('.row-open').first().click();
 await page.waitForTimeout(400);
 await page.keyboard.press('Escape');
 await page.locator('.aging-bucket').first().click();
+await page.locator('.feedback-button').click();
+await page.waitForTimeout(200);
+await page.keyboard.press('Escape');
 // Composites built from already-translated parts (they contain Devanagari) or from budget-head codes are not gaps.
 const missing = (await page.evaluate(() => [...(window.__missingMr ?? [])].sort()))
   .filter(text => !/[ऀ-ॿ]/.test(text) && !/^A2\d\d -\n/.test(text));

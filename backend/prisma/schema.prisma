@@ -183,3 +183,29 @@ model District {
 
   @@map("districts")
 }
+
+/// Opt-in, anonymised usage log for UX research (HCI case study). Off unless RESEARCH_LOG_ENABLED=true.
+/// No user id, name, IP, search text or record values are stored: only an anonymous per-tab session id,
+/// an event type, the page, a few whitelisted keys and a duration.
+model UsageEvent {
+  id         String   @id @default(cuid())
+  sessionId  String
+  type       String
+  page       String
+  detail     String?
+  durationMs Int?
+  createdAt  DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@map("usage_events")
+}
+
+/// One-line feedback comments with the page they were left on. Not linked to any user.
+model Feedback {
+  id        String   @id @default(cuid())
+  page      String
+  comment   String
+  createdAt DateTime @default(now())
+
+  @@map("feedback")
+}

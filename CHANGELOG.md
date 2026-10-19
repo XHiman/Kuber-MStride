@@ -2,6 +2,17 @@
 
 One entry per step of the UX / trust improvement plan.
 
+## Step 11 — Research hooks (HCI portfolio)
+- **Anonymised usage log, OFF by default.** It records only when the frontend is built with `VITE_RESEARCH_LOG=true` **and** the server sets `RESEARCH_LOG_ENABLED=true` (added to `.env.example` as `false`). With either flag off it is a no-op: nothing is queued or sent. Logged events:
+  - page views, with theme, language and viewport width
+  - **time to find an overdue bill**, from page load to the first time a bill over the threshold is opened in the drawer (`task_start` → `overdue_found` with `durationMs`)
+  - **filters used**: saved view, stage slug, status, or "vendor" / "search" without the value
+  - **errors**: load, assign and undo failures, by kind only.
+- **No personal data**: an anonymous per-tab session id (random, kept in sessionStorage), never a user id, name, IP, search text, vendor or amount. The server enforces this independently (`backend/src/research/research-input.ts`, tested): event types, pages and detail keys are whitelisted, detail values must be short slugs, batches are capped at 50 and durations are range-checked. Events are batched and sent with `sendBeacon` every 10 s and on page hide.
+- **Feedback** button on every page (footer) opens a one-line dialog (max 280 characters). The comment is stored with the page name only; the dialog says so and asks users not to include personal details, and the server also masks long digit runs.
+- Storage: migration `20261019140000_research_usage_feedback` adds the `usage_events` and `feedback` tables. Admins can export both as JSON from `GET /adminX/api/research` (admin session required).
+- ⚠ Feedback needs the backend deployed (the migration runs on `start:prod`). The Vite dev proxy now forwards `/research`, so restart `npm run dev` to pick it up.
+
 ## Step 10 — Copy and microinteractions
 - **Loading skeletons** shaped like the content (KPI cards plus table rows) appear on the Bills, Budget, Transfers and Dashboard tabs while data loads. They are announced once as "Loading…", the shimmer stops under reduced motion, and the tab is marked `aria-busy` during refreshes.
 - **Error + Retry**: a failed load shows the server's reason, reassures the user that nothing they entered was lost, and offers a Retry button (checked by forcing a 503 on `/bills/dashboard`, then recovering). A refresh that fails while data is already on screen keeps that data and shows an error toast with Retry, instead of blanking the page.

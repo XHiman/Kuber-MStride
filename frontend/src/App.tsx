@@ -7,6 +7,8 @@ import { AppSettingsContext, translate, type Language, type Theme, type ThemePre
 import { apiClient } from './lib/api';
 import { formatDateTime } from './lib/format';
 import { ToastProvider } from './components/Toast';
+import FeedbackButton from './components/FeedbackButton';
+import { research } from './lib/research';
 import type { GlobalSearchResult, UserProfile } from './types';
 
 type Tab = 'bills' | 'budget' | 'transfers' | 'dashboard';
@@ -56,6 +58,13 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  // Research hooks (no-ops unless VITE_RESEARCH_LOG=true): page views and the "find an overdue bill" task timer.
+  useEffect(() => { research.startTask('find_overdue', 'bills'); }, []);
+  useEffect(() => {
+    research.track('view', activeTab, { theme, language, width: window.innerWidth });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   useEffect(() => {
     try { localStorage.setItem('mitra-theme', themePref); } catch { /* storage unavailable */ }
@@ -298,6 +307,7 @@ export default function App() {
       </main>
 
       <footer>
+        <FeedbackButton page={activeTab} />
         <details className="help-details">
           <summary>{t('How figures and bill statuses are calculated')}</summary>
           <p>

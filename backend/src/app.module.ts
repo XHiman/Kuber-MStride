@@ -8,8 +8,9 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { UsersModule } from './users/users.module';
 import { SearchModule } from './search/search.module';
 import { AdminModule } from './admin/admin.module';
+import { ResearchModule } from './research/research.module';
 
 @Module({
-  imports: [PrismaModule, BillsModule, BudgetModule, TransfersModule, DistrictsModule, DashboardModule, UsersModule, SearchModule, AdminModule],
+  imports: [PrismaModule, BillsModule, BudgetModule, TransfersModule, DistrictsModule, DashboardModule, UsersModule, SearchModule, AdminModule, ResearchModule],
 })
 export class AppModule {}

@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiTarget = env.VITE_API_TARGET || 'http://localhost:3001';
   const apiPrefix = (env.VITE_API_PREFIX || '').replace(/\/+$/, '');
-  const apiPaths = ['/bills', '/budget', '/transfers', '/districts', '/users', '/search', '/adminX/api'];
+  const apiPaths = ['/bills', '/budget', '/transfers', '/districts', '/users', '/search', '/research', '/adminX/api'];
   const apiProxy = Object.fromEntries(apiPaths.map(path => [
     path,
     {

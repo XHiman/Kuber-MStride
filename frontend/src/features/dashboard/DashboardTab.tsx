@@ -4,6 +4,7 @@ import type { Bill, UserProfile } from '../../types';
 import { useAppSettings } from '../../lib/appSettings';
 import WorkScope, { type DistrictRecord } from './WorkScope';
 import { LoadError, Skeleton } from '../../components/LoadState';
+import { research } from '../../lib/research';
 
 interface PersonalDashboard {
   user: UserProfile;
@@ -43,7 +44,7 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
     // The scope (finance → all bills, DSU → own DSU) is applied client-side to the full bill list.
     Promise.all([apiClient.users.dashboard(), apiClient.bills.list()])
       .then(([data, bills]: [PersonalDashboard, Bill[]]) => { setDashboard(data); setAllBills(bills); setError(''); setLoadedAt(new Date()); })
-      .catch(loadError => setError(loadError instanceof Error ? loadError.message : t('Could not load the dashboard.')));
+      .catch(loadError => { research.track('error', 'dashboard', { kind: 'load' }); setError(loadError instanceof Error ? loadError.message : t('Could not load the dashboard.')); });
   }, [user?.id, retryKey]);
 
   if (!user) {

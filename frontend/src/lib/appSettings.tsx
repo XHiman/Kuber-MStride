@@ -15,6 +15,15 @@ const translations: Record<string, string> = {
   'Financial workspaces': 'आर्थिक कार्यक्षेत्रे',
   // Step 1 — status language. TODO: review Marathi wording with a native speaker.
   'What do these mean?': 'याचा अर्थ काय?',
+  // Step 11 — feedback. TODO: review Marathi wording.
+  'Feedback': 'अभिप्राय',
+  'Send feedback': 'अभिप्राय पाठवा',
+  'What could be clearer or faster on this page?': 'या पानावर काय अधिक स्पष्ट किंवा जलद होऊ शकेल?',
+  'Saved with the page name only, not your name. Please do not include personal details.': 'फक्त पानाच्या नावासह जतन होते, तुमच्या नावासह नाही. कृपया वैयक्तिक माहिती लिहू नका.',
+  'Thanks — your feedback was saved.': 'धन्यवाद — तुमचा अभिप्राय जतन झाला.',
+  'Could not send feedback.': 'अभिप्राय पाठवता आला नाही.',
+  'Sending…': 'पाठवत आहे…',
+  'Enter a comment.': 'टिप्पणी लिहा.',
   // Step 10 — microinteractions. TODO: review Marathi wording.
   'Dismiss notification': 'सूचना बंद करा',
   'Undo of previous change': 'मागील बदल पूर्ववत',
@@ -90,7 +99,7 @@ const translations: Record<string, string> = {
   'Last updated': 'शेवटचा बदल',
   'Loaded': 'लोड केले',
   'Loading data…': 'माहिती लोड होत आहे…',
-  'Source: MahaSTRIDE tracker database; figures refresh when the page loads': 'स्रोत: MahaSTRIDE ट्रॅकर डेटाबेस; पान लोड झाल्यावर आकडे अद्ययावत होतात',
+  'Source: MahaSTRIDE tracker database; figures refresh when the page loads': 'स्रोत: महास्ट्राईड ट्रॅकर डेटाबेस; पान लोड झाल्यावर आकडे अद्ययावत होतात',
   'Refresh data': 'माहिती ताजी करा',
   'What': 'काय',
   'Who': 'कोणी',
@@ -278,7 +287,7 @@ const translations: Record<string, string> = {
   'Fund transfers': 'निधी हस्तांतरण',
   'Recipients, utilization & districts': 'प्राप्तकर्ते, वापर आणि जिल्हे',
   'Bill & Budget Tracker': 'बिल आणि अंदाजपत्रक ट्रॅकर',
-  'MahaSTRIDE financial operations workspace': 'महाSTRIDE आर्थिक कार्यक्षेत्र',
+  'MahaSTRIDE financial operations workspace': 'महास्ट्राईड आर्थिक कार्यक्षेत्र',
   'live': 'थेट',
   'Appearance': 'दिसण्याची पद्धत',
   'Total bill value': 'बिलांची एकूण रक्कम',

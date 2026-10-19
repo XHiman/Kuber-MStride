@@ -1,11 +1,12 @@
-import { forwardRef, useEffect, useId, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { research } from '../../lib/research';
 import { Money } from '../../components/Money';
 import { ReasonBadges, RecordedText } from '../../components/StatusGlossary';
 import { isOverdue } from '../../lib/aging';
 import { useAppSettings } from '../../lib/appSettings';
 import { downloadCSVText } from '../../lib/export';
 import { formatDate } from '../../lib/format';
-import { STAGE_GLOSSARY } from '../../lib/status';
+import { STAGE_GLOSSARY, STAGE_SLUGS } from '../../lib/status';
 import { STAGES, type Bill, type BillCategory, type UserProfile } from '../../types';
 import BillDrawer from './BillDrawer';
 import { useToast } from '../../components/Toast';
@@ -63,6 +64,22 @@ const Register = forwardRef<HTMLHeadingElement, Props>(function Register(
 
   // Back to page 1 whenever the result set changes shape.
   useEffect(() => { setPage(1); }, [stage, filters, globalQuery, sortKey, sortDir]);
+
+  // Research hooks: which filters people reach for (names only, never search text or vendor values).
+  const previousFilters = useRef({ ...filters, stage });
+  useEffect(() => {
+    const before = previousFilters.current;
+    if (filters.view !== before.view && filters.view) research.track('filter_used', 'bills', { filter: 'view', value: filters.view });
+    if (stage !== before.stage && stage) research.track('filter_used', 'bills', { filter: 'stage', value: STAGE_SLUGS[stage] });
+    if (filters.cat !== before.cat && filters.cat) research.track('filter_used', 'bills', { filter: 'status', value: filters.cat });
+    if (filters.vendor !== before.vendor && filters.vendor) research.track('filter_used', 'bills', { filter: 'vendor' });
+    if (!before.search && filters.search) research.track('filter_used', 'bills', { filter: 'search' });
+    previousFilters.current = { ...filters, stage };
+  }, [filters, stage]);
+
+  useEffect(() => {
+    if (openBill && isOverdue(openBill, overdueDays)) research.endTask('find_overdue', 'bills', 'overdue_found', { source: 'drawer' });
+  }, [openBill, overdueDays]);
 
   function update(patch: Partial<typeof filters>) {
     setFilters(previous => ({ ...previous, ...patch }));

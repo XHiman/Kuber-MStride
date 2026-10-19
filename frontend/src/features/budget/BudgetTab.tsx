@@ -4,6 +4,7 @@ import type { BudgetRow } from '../../types';
 import { fmtIN, fmtShort, pct } from '../../lib/format';
 import { AsOf, Money } from '../../components/Money';
 import { LoadError, Skeleton } from '../../components/LoadState';
+import { research } from '../../lib/research';
 import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
 
@@ -55,6 +56,7 @@ export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnl
       data = await apiClient.budget.get(fiscalYear);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Could not load the data');
+      research.track('error', 'budget', { kind: 'load' });
       return;
     }
     setLoadError('');

@@ -4,6 +4,7 @@ import { FISCAL_YEARS, type Transfer, type District, type UserProfile } from '..
 import { fmtIN, formatDate } from '../../lib/format';
 import { AsOf, Money } from '../../components/Money';
 import { LoadError, Skeleton } from '../../components/LoadState';
+import { research } from '../../lib/research';
 import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
 import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
@@ -80,6 +81,7 @@ export default function TransfersTab({ globalQuery = '', readOnly = false, refre
       ]);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Could not load the data');
+      research.track('error', 'transfers', { kind: 'load' });
       return transfers;
     }
     setLoadError('');

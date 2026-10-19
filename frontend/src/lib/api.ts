@@ -85,6 +85,9 @@ export const apiClient = {
     session: () => api<import('../types').UserProfile>('/users/session'),
     dashboard: () => api<any>('/users/dashboard'),
   },
+  research: {
+    feedback: (data: { page: string; comment: string }) => api<{ saved: true }>('/research/feedback', { method: 'POST', body: JSON.stringify(data) }),
+  },
   search: (query: string) =>
     api<import('../types').GlobalSearchResult[]>(`/search?${new URLSearchParams({ q: query })}`),
 };
