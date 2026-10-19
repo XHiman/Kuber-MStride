@@ -241,7 +241,7 @@ export default function App() {
             tabIndex={0}
             hidden={activeTab !== tab.id}
           >
-            {tab.id === 'bills' && <BillsTab globalQuery={globalQuery} readOnly={!userSessionChecked || !currentUser} />}
+            {tab.id === 'bills' && <BillsTab globalQuery={globalQuery} readOnly={!userSessionChecked || !currentUser} currentUserId={currentUser?.id ?? null} />}
             {tab.id === 'budget' && <BudgetTab globalQuery={globalQuery} initialFiscalYear={budgetFiscalYear} readOnly={!userSessionChecked || !currentUser} />}
             {tab.id === 'transfers' && <TransfersTab globalQuery={globalQuery} readOnly={!userSessionChecked || !currentUser} />}
             {tab.id === 'dashboard' && (

@@ -4696,3 +4696,220 @@ footer {
   flex-wrap: wrap;
   row-gap: 4px;
 }
+
+/* ── Bill register (Step 5) ── */
+.bill-register-table .bill-col-days { width: 96px; }
+.bill-register-table .bill-col-actions { width: 104px; }
+.table-scroll table.bill-register-table {
+  width: max(100%, 1220px);
+  min-width: 1220px;
+}
+.bill-register-scroll {
+  max-height: min(72vh, 900px);
+  overflow: auto;
+}
+.bill-register-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border-strong);
+}
+.bill-register-table th.sortable button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.bill-register-table th.sortable button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.bill-register-table td {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.bill-register-row {
+  cursor: pointer;
+}
+.bill-register-row:hover td {
+  background: var(--surface-hover);
+}
+.row-open {
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  color: var(--text-1);
+}
+.row-open:hover {
+  text-decoration: underline;
+}
+.row-actions-cell .row-actions {
+  display: flex;
+  gap: 4px;
+}
+.register-caption {
+  caption-side: top;
+  padding: 8px 10px;
+  color: var(--text-2);
+  font-size: 12px;
+  text-align: left;
+}
+.saved-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.view-chip {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.view-chip.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+.view-chip.is-selected::before {
+  content: "✓ ";
+}
+.view-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.view-chip:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+.register-panel .export-status:empty {
+  display: none;
+}
+.register-empty {
+  margin: 12px;
+}
+.register-empty .btn {
+  margin-left: auto;
+}
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.reg-foot {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(0 0 0 / 0.38);
+}
+.bill-drawer {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100vw);
+  height: 100%;
+  background: var(--surface);
+  color: var(--text-1);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -12px 0 32px rgb(0 0 0 / 0.18);
+  animation: drawer-in 0.18s var(--ease, ease-out);
+}
+@keyframes drawer-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bill-drawer { animation: none; }
+}
+.drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.drawer-head h2 {
+  margin: 2px 0 8px;
+  font-size: 18px;
+}
+.drawer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.drawer-chips .reason-list {
+  margin-top: 0;
+}
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.drawer-body h3 {
+  margin: 18px 0 8px;
+  font-size: 13px;
+}
+.drawer-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  margin: 0;
+}
+.drawer-facts dt {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.drawer-facts dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.drawer-status,
+.drawer-hold {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.drawer-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 430px) {
+  .drawer-facts {
+    grid-template-columns: 1fr;
+  }
+}
+.drawer-head > div {
+  flex: 1;
+  min-width: 0;
+}
+.drawer-head > .btn {
+  flex: none;
+  width: auto;
+}

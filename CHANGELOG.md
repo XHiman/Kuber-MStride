@@ -2,6 +2,17 @@
 
 One entry per step of the UX / trust improvement plan.
 
+## Step 5 — Bill register
+- The register is now its own component (`features/bills/Register.tsx`), with pure, tested logic in `registerLogic.ts`.
+- Table semantics: a visible `<caption>` ("Showing 1–25 of 76 bills · sorted by Invoice date, ascending"), `<th scope="col">`, and sortable headers (Vendor, Invoice date, Days open, Amount, Stage) that are real buttons with `aria-sort`. A new **Days open** column has Overdue flags. Missing dates and day counts sort last in both directions.
+- Sticky header inside a scroll area capped at 72 % of the viewport height; pages of 25 rows with Previous/Next and an `aria-live` page counter. Filters, views and sorting reset to page 1.
+- Clicking a row (or pressing Enter on its vendor button) opens a **side drawer** instead of a page. It shows all the bill's details (exact amount, days open, owner, budget code, hold remark) and the **stage timeline**, each entry with its date and time and "Changed by: not recorded" until Step 8 records the author. The drawer is `role="dialog"` and `aria-modal`, traps focus, closes with Esc or a backdrop click, and returns focus to the row. When signed in it also offers Edit bill / Move to next stage / Put on hold. This replaces the old history modal.
+- Row actions are always visible in their own column instead of appearing only on hover.
+- Saved views: All bills · **My assigned bills** (disabled with an explanation when signed out) · **Overdue** (23 bills) · **On hold** (1) · **Cleared this FY** (31 in FY 2026-27).
+- **Export CSV** downloads the current filtered view (all pages) directly. The file starts with `# Exported: 19 Oct 2026, 17:14`, `# Filters: View = Overdue; …` and `# Rows: 23` lines, and asks for confirmation above 500 rows. A status message confirms the filename. Cells starting with `=`, `+` or `@` are neutralised so Excel cannot run them as formulas (this applies to all exports).
+- The empty state lists the active filters, mentions the global search box when it is in use, and has a **Clear filters** button.
+- The `?stage=` URL sync from Step 4 now runs through the register's stage filter.
+
 ## Step 4 — Pipeline stage cards
 - Each stage card is a link (`?stage=invoice|pmc|tfc|file|treasury|cleared`). Clicking one filters the bill register to that stage, scrolls to it and moves focus to the register heading, which names the active stage. Clicking the active card clears the filter. Ctrl/⌘-click opens the filtered view in a new tab.
 - The URL stays in sync with the register's stage filter (`replaceState`), so `?stage=tfc` deep-links and survives a refresh.

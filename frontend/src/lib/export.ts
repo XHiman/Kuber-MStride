@@ -8,7 +8,8 @@ export function formatCSV(data: Record<string, unknown>[]): string {
   const headers = Object.keys(data[0]);
   const escape = (v: unknown): string => {
     if (v == null) return '';
-    const s = String(v);
+    // Text starting with = + @ (or a tab/CR) would run as a formula in Excel; prefix it with '.
+    const s = typeof v === 'string' && /^[=+@\t\r]/.test(v) ? `'${v}` : String(v);
     if (/[,"\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
     return s;
   };
@@ -25,6 +26,17 @@ export async function copyCSVToClipboard(data: Record<string, unknown>[]): Promi
 export function downloadCSV(data: Record<string, unknown>[], filename = 'export') {
   if (!data.length) return;
   const blob = new Blob(['\uFEFF' + formatCSV(data)], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${filename}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Download already-formatted CSV text (UTF-8 with BOM so Excel shows ₹ and Marathi correctly). */
+export function downloadCSVText(csv: string, filename = 'export') {
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

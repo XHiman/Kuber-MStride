@@ -1,36 +1,28 @@
-import { useState, useEffect, useMemo, useRef, type KeyboardEvent, type MutableRefObject } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { apiClient } from '../../lib/api';
 import { STAGES, type Bill } from '../../types';
-import { fmtShort, formatDate, formatDateTime, pct } from '../../lib/format';
+import { fmtShort, pct } from '../../lib/format';
 import { AsOf, Money } from '../../components/Money';
-import { BillCategory } from '../../types';
 import { useAppSettings } from '../../lib/appSettings';
-import ExportActions from '../../components/ExportActions';
 import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
-import { createPortal } from 'react-dom';
-import { GlossaryButton, ReasonBadges, RecordedText, StageIcon, StageTerm } from '../../components/StatusGlossary';
-import { REASONS, STAGE_GLOSSARY, STAGE_SLUGS, deriveReasons, movesInMonth, plural, stageFromSlug } from '../../lib/status';
-import { DEFAULT_OVERDUE_DAYS, isOverdue, parseThreshold } from '../../lib/aging';
+import { GlossaryButton, StageIcon, StageTerm } from '../../components/StatusGlossary';
+import { STAGE_GLOSSARY, STAGE_SLUGS, movesInMonth, plural, stageFromSlug } from '../../lib/status';
+import { DEFAULT_OVERDUE_DAYS, parseThreshold } from '../../lib/aging';
 import AgingPanel from './AgingPanel';
 import NeedsActionPanel from './NeedsActionPanel';
-import { EmptyState, OverdueFlag, StageChip, billAmount, billRef, stageClass } from './shared';
+import Register from './Register';
+import { EmptyState, billAmount } from './shared';
 
-export default function BillsTab({ globalQuery = '', readOnly = false }: { globalQuery?: string; readOnly?: boolean }) {
+export default function BillsTab({ globalQuery = '', readOnly = false, currentUserId = null }: { globalQuery?: string; readOnly?: boolean; currentUserId?: string | null }) {
   const { t } = useAppSettings();
   const [bills, setBills] = useState<Bill[]>([]);
   const [users, setUsers] = useState<import('../../types').UserProfile[]>([]);
   const [dashboard, setDashboard] = useState<any>(null);
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
-  const [search, setSearch] = useState('');
-  const [vendorFilter, setVendorFilter] = useState('');
   // ?stage=tfc deep-links the register to one stage; kept in sync below.
   const [stageFilter, setStageFilter] = useState(() => stageFromSlug(new URLSearchParams(window.location.search).get('stage')));
   const registerRef = useRef<HTMLHeadingElement>(null);
   const [monthMoves, setMonthMoves] = useState(0);
-  const [catFilter, setCatFilter] = useState<BillCategory | ''>('');
-  // Oldest first by default, so the longest-waiting bills are seen first.
-  const [sortBy, setSortBy] = useState<BillSortKey>('date');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [overdueDays, setOverdueDays] = useState(() => {
     try { return parseThreshold(localStorage.getItem('mitra-overdue-days') ?? DEFAULT_OVERDUE_DAYS); } catch { return DEFAULT_OVERDUE_DAYS; }
   });
@@ -101,35 +93,6 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
     }
   }
 
-  const filtered = useMemo(() => {
-    let rows = [...bills];
-    if (vendorFilter) rows = rows.filter(b => b.vendor === vendorFilter);
-    if (stageFilter) rows = rows.filter(b => b.bucket === stageFilter);
-    if (catFilter) rows = rows.filter(b => b.cat === catFilter);
-    if (search || globalQuery) {
-      const q = `${search} ${globalQuery}`.toLowerCase().trim().split(/\s+/).filter(Boolean);
-      rows = rows.filter(b => {
-        const assignedName = users.find(user => user.id === b.assignedUserId)?.name || '';
-        const haystack = `${b.vendor} ${b.invoice} ${b.efileNumber || ''} ${b.status} ${b.cat} ${b.bucket} ${b.attribute || ''} ${b.note || ''} ${b.holdReason || ''} ${b.budgetCode || ''} ${b.objectHead || ''} ${b.program || ''} ${b.district || ''} ${assignedName} ${billAmount(b)} ${b.date || ''}`.toLowerCase();
-        return q.every(term => haystack.includes(term));
-      });
-    }
-    rows.sort((a, c) => {
-      if (sortBy === 'date' && !a.date !== !c.date) return a.date ? -1 : 1;
-      let av: any = sortBy === 'amount' ? billAmount(a) : a[sortBy as keyof Bill] ?? '';
-      let cv: any = sortBy === 'amount' ? billAmount(c) : c[sortBy as keyof Bill] ?? '';
-      if (typeof av === 'string') av = av.toLowerCase();
-      if (typeof cv === 'string') cv = cv.toLowerCase();
-      return av < cv ? -1 * (sortDir === 'asc' ? 1 : -1) : av > cv ? 1 * (sortDir === 'asc' ? 1 : -1) : 0;
-    });
-    return rows;
-  }, [bills, users, search, globalQuery, vendorFilter, stageFilter, catFilter, sortBy, sortDir]);
-
-  const vendors = useMemo(() => {
-    const set = new Set(bills.map(b => b.vendor));
-    return Array.from(set).sort();
-  }, [bills]);
-
   async function handleSave(data: Partial<Bill>) {
     if (editingBill) {
       await apiClient.bills.update(editingBill.id, data);
@@ -138,30 +101,6 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
     }
     await load();
     setShowModal(false);
-  }
-
-  function getExportRows() {
-    return filtered.map(b => ({
-      '#': b.sr ?? '',
-      Vendor: b.vendor,
-      Invoice: b.invoice,
-      'E-file number': b.efileNumber || '',
-      Date: b.date || '',
-      Amount: billAmount(b),
-      'Amount Raised': b.amount,
-      'Amount Sanctioned': b.amountSanctioned ?? '',
-      Stage: b.bucket,
-      Status: b.cat,
-      'Action needed': deriveReasons(b).map(code => REASONS[code].label).join('; '),
-      'Cleared FY': b.clearedFY || '',
-      Attribute: b.attribute || '',
-      Program: b.program || '',
-      District: b.district || '',
-      'Stage history': (b.stageHistory || []).map(entry => `${entry.stage}: ${formatDateTime(entry.enteredAt)}`).join(' | '),
-      Assigned_to: users.find(user => user.id === b.assignedUserId)?.name || '',
-      Days_Pending: b.days ?? '',
-      Note: b.note || '',
-    }));
   }
 
   return (
@@ -217,50 +156,21 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
       />
 
       {/* Full register */}
-      <div className="panel">
-        <div className="panel-head">
-          <h2 id='bill-register' ref={registerRef} tabIndex={-1}>{t('Full bill register')}{stageFilter && <span className='register-scope'> · {t(STAGE_GLOSSARY.find(entry => entry.stage === stageFilter)?.label ?? stageFilter)}</span>}</h2>
-          <div className="panel-actions">
-            <span className="note">{filtered.length} {t('of')} {bills.length} {t('bills')}</span>
-            <ExportActions getRows={getExportRows} filename="bills" />
-            {!readOnly && <button className="btn primary" onClick={() => { setEditingBill(null); setShowModal(true); }}>+ {t('Add bill')}</button>}
-          </div>
-        </div>
-        <Filters
-          vendors={vendors}
-          search={search}
-          setSearch={setSearch}
-          vendorFilter={vendorFilter}
-          setVendorFilter={setVendorFilter}
-          stageFilter={stageFilter}
-          setStageFilter={setStageFilter}
-          catFilter={catFilter}
-          setCatFilter={setCatFilter}
-          onClear={() => {
-            setSearch('');
-            setVendorFilter('');
-            setStageFilter('');
-            setCatFilter('');
-          }}
-        />
-        <Table
-          bills={filtered}
-          users={users}
-          emptyMessage={bills.length === 0 ? t('No bills have been added yet. Use “Add bill” to start the register.') : t('No bills match the selected search or filters.')}
-          sortBy={sortBy}
-          sortDir={sortDir}
-          overdueDays={overdueDays}
-          onSort={(k: BillSortKey) => { if (sortBy === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(k); setSortDir(k === 'date' ? 'asc' : 'desc'); } }}
-          onEdit={(b: Bill) => { setEditingBill(b); setShowModal(true); }}
-          onNextStage={bill => void handleNextStage(bill)}
-          onToggleHold={bill => void handleHoldToggle(bill)}
-          readOnly={readOnly}
-        />
-        <div className="reg-foot">
-          <span>{t('"#" renumbers with your current filter/sort · click Date / Amount to sort · hover a row for actions')}</span>
-          <span>{t('Filtered total')}: <Money value={filtered.reduce((s, b) => s + billAmount(b), 0)} /></span>
-        </div>
-      </div>
+      <Register
+        ref={registerRef}
+        bills={bills}
+        users={users}
+        currentUserId={currentUserId}
+        readOnly={readOnly}
+        overdueDays={overdueDays}
+        globalQuery={globalQuery}
+        stage={stageFilter}
+        onStageChange={setStageFilter}
+        onAdd={() => { setEditingBill(null); setShowModal(true); }}
+        onEdit={bill => { setEditingBill(bill); setShowModal(true); }}
+        onNextStage={bill => void handleNextStage(bill)}
+        onToggleHold={bill => void handleHoldToggle(bill)}
+      />
 
       {showModal && <BillModal key={editingBill?.id ?? 'new'} bill={editingBill} onSave={handleSave} onClose={() => setShowModal(false)} />}
     </div>
@@ -467,338 +377,11 @@ function VendorPanel({ bills, asOf }: { bills: Bill[]; asOf: Date | null }) {
 
 
 
-type FiltersProps = {
-  vendors: string[];
-  search: string;
-  setSearch: (value: string) => void;
-  vendorFilter: string;
-  setVendorFilter: (value: string) => void;
-  stageFilter: string;
-  setStageFilter: (value: string) => void;
-  catFilter: BillCategory | '';
-  setCatFilter: (value: BillCategory | '') => void;
-  onClear: () => void;
-};
 
-function Filters({ vendors, search, setSearch, vendorFilter, setVendorFilter, stageFilter, setStageFilter, catFilter, setCatFilter, onClear }: FiltersProps) {
-  const { t } = useAppSettings();
-  const hasFilters = Boolean(search || vendorFilter || stageFilter || catFilter);
-  return (
-    <div className="filters">
-      <label className="sr-only" htmlFor="bill-search">{t('Search bills')}</label>
-      <input id="bill-search" type="search" placeholder={t('Search vendor, invoice no., E-file or status…')} value={search} onChange={e => setSearch(e.target.value)} />
-      <label className="sr-only" htmlFor="bill-vendor-filter">{t('Filter by vendor')}</label>
-      <select id="bill-vendor-filter" value={vendorFilter} onChange={e => setVendorFilter(e.target.value)}>
-        <option value="">{t('All vendors')}</option>
-        {vendors.map((vendor: string) => (
-          <option key={vendor} value={vendor}>
-            {vendor}
-          </option>
-        ))}
-      </select>
-      <label className="sr-only" htmlFor="bill-stage-filter">{t('Filter by stage')}</label>
-      <select id="bill-stage-filter" value={stageFilter} onChange={e => setStageFilter(e.target.value)}>
-        <option value="">{t('All stages')}</option>
-        {['Invoice Raised', 'PMC Check Pending', 'TFC Committee Approval', 'File Approval Pending', 'Sent to Treasury', 'Cleared by Treasury'].map(s => <option key={s} value={s}>{t(s)}</option>)}
-      </select>
-      <label className="sr-only" htmlFor="bill-status-filter">{t('Filter by status')}</label>
-      <select id="bill-status-filter" value={catFilter} onChange={e => setCatFilter(e.target.value as BillCategory | '')}>
-        <option value="">{t('All statuses')}</option>
-        <option value="cleared">{t('Cleared')}</option>
-        <option value="in_progress">{t('In progress')}</option>
-        <option value="on_hold">{t('On hold')}</option>
-      </select>
-      {hasFilters && <button type="button" className="btn" onClick={onClear}>{t('Clear filters')}</button>}
-    </div>
-  );
-}
 
-type BillSortKey = 'date' | 'amount';
 
- type TableProps = {
-    bills: Bill[];
-    users: import('../../types').UserProfile[];
-    sortBy: BillSortKey;
-    sortDir: 'asc' | 'desc';
-    overdueDays: number;
-    onSort: (key: BillSortKey) => void;
-    onEdit: (bill: Bill) => void;
-    onNextStage: (bill: Bill) => void;
-    onToggleHold: (bill: Bill) => void;
-    readOnly: boolean;
-  };
 
-function Table({ bills, users, emptyMessage, sortBy, sortDir, overdueDays, onSort, onEdit, onNextStage, onToggleHold, readOnly }: TableProps & { emptyMessage: string }) {
-  const { t } = useAppSettings();
-  const [historyBill, setHistoryBill] = useState<Bill | null>(null);
-  const historyTriggerRef = useRef<HTMLButtonElement | null>(null);
-  return (
-    <div className="table-scroll bill-register-scroll">
-      <table className="bill-register-table">
-        <colgroup>
-          <col className="bill-col-vendor" />
-          <col className="bill-col-invoice" />
-          <col className="bill-col-efile" />
-          <col className="bill-col-date" />
-          <col className="bill-col-amount" />
-          <col className="bill-col-stage" />
-          <col className="bill-col-entity" />
-          <col className="bill-col-assignee" />
-          <col className="bill-col-attribute" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th>{t('Vendor')}</th><th>{t('Invoice no.')}</th><th>{t('E-file no.')}</th>
-            <th className="sortable" aria-sort={sortBy === 'date' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-              <button type="button" onClick={() => onSort('date')}>{t('Date')} <span aria-hidden="true">{sortBy === 'date' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span></button>
-            </th>
-            <th className="num sortable" aria-sort={sortBy === 'amount' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-              <button type="button" onClick={() => onSort('amount')}>{t('Amount')} <span aria-hidden="true">{sortBy === 'amount' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span></button>
-            </th>
-            <th>{t('Stage')}</th><th>{t('Program / District')}</th><th>{t('Assigned person')}</th><th>{t('Payment attribute')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {bills.map((b: Bill) => (
-            <tr key={b.id} className="bill-register-row">
-              <td className="bill-register-cell vendor-cell">{b.vendor}</td>
-              <td className="bill-register-cell inv-cell mono"><RecordedText value={b.invoice} /></td>
-              <td className="bill-register-cell mono">{b.efileNumber || '—'}</td>
-              <td className="bill-register-cell mono">{formatDate(b.date)}{isOverdue(b, overdueDays) && <><br /><OverdueFlag threshold={overdueDays} /></>}</td>
-              <td className="bill-register-cell num amt-cell mono"><Money value={billAmount(b)} /></td>
-              <td className="bill-register-cell bill-stage-cell">
-                <StageChip bill={b} />
-                <ReasonBadges bill={b} />
-              </td>
-              <td className="bill-register-cell">{b.program || b.district || '—'}</td>
-              <td className="bill-register-cell">{users.find(user => user.id === b.assignedUserId)?.name || '—'}</td>
-              <td className={`bill-register-cell status-cell ${readOnly ? '' : 'bill-attribute-cell'}`}>
-                <span className="bill-attribute-value" title={b.attribute || undefined}><RecordedText value={b.attribute} /></span>
-                {!readOnly && <div className="bill-row-actions" aria-label={t('Bill actions')}>
-                 {b.bucket !== STAGES[STAGES.length - 1] && (
-  <button
-    type="button"
-    className="btn-icon"
-    onClick={() => onNextStage(b)}
-    title={t('Move to next stage')}
-    aria-label={`${t('Move to next stage')}: ${billRef(b)}`}
-  >
-    ⇢
-  </button>
-)}
 
-{!!b.stageHistory?.length && (
-    <button
-      type="button"
-      className="btn-icon"
-      onClick={event => {
-        historyTriggerRef.current = event.currentTarget;
-        setHistoryBill(b);
-      }}
-      title={t('View History')}
-      aria-label={`View history for: ${billRef(b)}`}
-    >
-      {/* History icon */}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-        <path d="M3 3v5h5" />
-        <path d="M12 7v5l4 2" />
-      </svg>
-    </button>
-)}
-
-                  <button type="button" className="btn-icon" onClick={() => onToggleHold(b)} title={t(b.cat === 'on_hold' ? 'Release hold' : 'Put on hold')} aria-label={`${t(b.cat === 'on_hold' ? 'Release hold' : 'Put on hold')}: ${billRef(b)}`}>{b.cat === 'on_hold' ? '▶' : 'Ⅱ'}</button>
-                  <button type="button" className="btn-icon" onClick={() => onEdit(b)} title={t('Edit')} aria-label={`${t('Edit')}: ${billRef(b)}`}>✎</button>
-                </div>}
-              </td>
-            </tr>
-          ))}
-          {bills.length === 0 && (
-            <tr><td className="empty-table" colSpan={9}>{emptyMessage}</td></tr>
-          )}
-        </tbody>
-      </table>
-      {historyBill && (
-        <BillHistoryModal
-          bill={historyBill}
-          onClose={() => setHistoryBill(null)}
-          triggerRef={historyTriggerRef}
-        />
-      )}
-    </div>
-  );
-}
-
-function BillHistoryModal({
-  bill,
-  onClose,
-  triggerRef,
-}: {
-  bill: Bill;
-  onClose: () => void;
-  triggerRef: MutableRefObject<HTMLButtonElement | null>;
-}) {
-  const { t } = useAppSettings();
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const footerCloseButtonRef = useRef<HTMLButtonElement>(null);
-  const timeline = [...bill.stageHistory].reverse();
-  const currentEventId = timeline.find(entry => entry.stage === bill.bucket)?.id;
-
-  useEffect(() => {
-    const previousBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    closeButtonRef.current?.focus();
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow;
-      if (triggerRef.current?.isConnected) triggerRef.current.focus();
-    };
-  }, [bill.id, triggerRef]);
-
-  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      onClose();
-    } else if (event.key === 'Tab') {
-      event.preventDefault();
-      const focusableButtons = [closeButtonRef.current, footerCloseButtonRef.current]
-        .filter((button): button is HTMLButtonElement => button !== null);
-      const currentIndex = focusableButtons.findIndex(button => button === document.activeElement);
-      const nextIndex = event.shiftKey
-        ? (currentIndex <= 0 ? focusableButtons.length - 1 : currentIndex - 1)
-        : (currentIndex < 0 || currentIndex === focusableButtons.length - 1 ? 0 : currentIndex + 1);
-      focusableButtons[nextIndex]?.focus();
-    }
-  }
-
-  return createPortal(
-    <div className="history-modal-backdrop" onMouseDown={event => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <section
-        className="history-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="history-modal-title"
-        aria-describedby="history-modal-description"
-        onKeyDown={handleKeyDown}
-      >
-        <header className="history-modal-head">
-          <div>
-            <p className="history-modal-kicker">{t('Bill audit trail')}</p>
-            <h2 id="history-modal-title">{t('Stage History')}</h2>
-            <p id="history-modal-description">{t('Chronological record of this bill’s workflow stages.')}</p>
-          </div>
-          {/* <button
-            ref={closeButtonRef}
-            type="button"
-            className="btn-icon"
-            onClick={onClose}
-            aria-label={t('Close')}
-            title={t('Close')}
-          >
-            ×
-          </button> */}
-        </header>
-
-        <div className="history-modal-content">
-          <section className="history-bill-summary" aria-label={t('Bill details')}>
-            <div className="history-bill-identity">
-              <span className="history-summary-label">{t('Vendor')}</span>
-              <strong title={bill.vendor}>{bill.vendor}</strong>
-              <span className="history-bill-invoice mono">{bill.invoice}</span>
-            </div>
-            <div className="history-summary-item">
-              <span className="history-summary-label">{t('E-file no.')}</span>
-              <strong className="mono">{bill.efileNumber || '—'}</strong>
-            </div>
-            <div className="history-summary-item">
-              <span className="history-summary-label">{t('Amount')}</span>
-              <strong className="mono"><Money value={billAmount(bill)} exact /></strong>
-            </div>
-            <div className="history-current-stage">
-              <span className="history-summary-label">{t('Current stage')}</span>
-              <span className={`chip ${bill.cat} ${stageClass(bill.bucket)}`}>
-                <span className="dot" />{t(bill.bucket)}
-              </span>
-            </div>
-          </section>
-
-          <section className="history-timeline-section" aria-labelledby="history-timeline-title">
-            <div className="history-timeline-heading">
-              <div>
-                <h3 id="history-timeline-title">{t('Workflow timeline')}</h3>
-                <p>{t('Oldest event first')}</p>
-              </div>
-              <span className="history-event-count">
-                {timeline.length} {t(timeline.length === 1 ? 'record' : 'records')}
-              </span>
-            </div>
-
-            <ol className="history-timeline">
-              {timeline.map((entry, index) => {
-                const isSnapshot = entry.source === 'migration_snapshot' ||
-                  entry.source === 'legacy_backup_snapshot';
-                const isCurrent = entry.id === currentEventId;
-                const stageIndex = STAGES.indexOf(entry.stage);
-                return (
-                  <li
-                    key={entry.id}
-                    className={`history-timeline-entry${isCurrent ? ' is-current' : ''}${isSnapshot ? ' is-snapshot' : ''}`}
-                    aria-current={isCurrent ? 'step' : undefined}
-                  >
-                    <span className="history-timeline-marker" aria-hidden="true" />
-                    <div className="history-event-card">
-                      <div className="history-event-topline">
-                        <span className="history-event-stage">{t(entry.stage)}</span>
-                        {isCurrent && <span className="history-current-badge">{t('Current')}</span>}
-                        {stageIndex >= 0 && (
-                          <span className="history-event-step">
-                            {t('Stage')} {stageIndex + 1} / {STAGES.length}
-                          </span>
-                        )}
-                      </div>
-                      <time className="history-event-time" dateTime={entry.enteredAt}>
-                        {formatDateTime(entry.enteredAt)}
-                      </time>
-                      <span className="history-event-source">
-                        {t(isSnapshot ? 'Imported snapshot' : entry.source === 'created' ? 'Initial record' : 'Workflow update')}
-                        {!isSnapshot && index === timeline.length - 1 && entry.source === 'created'
-                          ? ` · ${t('Bill created')}`
-                          : ''}
-                      </span>
-                      {isSnapshot && (
-                        <p className="history-snapshot-notice">
-                          {t('Snapshot; earlier stages unavailable')}
-                        </p>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-        </div>
-        <footer className="history-modal-foot">
-          <span>{t('This is the recorded workflow history; snapshot entries do not include unavailable earlier stages.')}</span>
-          <button ref={footerCloseButtonRef} type="button" className="btn" onClick={onClose}>{t('Close')}</button>
-        </footer>
-      </section>
-    </div>,
-    document.body,
-  );
-}
 
 function BillModal({ bill, onSave, onClose }: { bill: Bill | null; onSave: (data: Partial<Bill>) => Promise<void>; onClose: () => void }) {
   const { t } = useAppSettings();
