@@ -6,6 +6,7 @@ import DashboardTab from './features/dashboard/DashboardTab';
 import { AppSettingsContext, translate, type Language, type Theme, type ThemePreference } from './lib/appSettings';
 import { apiClient } from './lib/api';
 import { formatDateTime } from './lib/format';
+import { ToastProvider } from './components/Toast';
 import type { GlobalSearchResult, UserProfile } from './types';
 
 type Tab = 'bills' | 'budget' | 'transfers' | 'dashboard';
@@ -137,6 +138,7 @@ export default function App() {
 
   return (
     <AppSettingsContext.Provider value={{ language, t, exactAmounts }}>
+    <ToastProvider>
     <div className="wrap">
       <header>
         <div className="logo">
@@ -317,6 +319,7 @@ export default function App() {
         </button>
       </aside>
     )}
+    </ToastProvider>
     </AppSettingsContext.Provider>
   );
 }

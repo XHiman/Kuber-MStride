@@ -27,7 +27,7 @@ export default function ExportActions({
 
   return (
     <div className="export-actions">
-      <button className="btn export-btn" type="button" onClick={copyExport}>▣ {t('Copy export')}</button>
+      <button className="btn export-btn" type="button" onClick={copyExport}>▣ {t('Copy as CSV')}</button>
       {copiedData && (
         <button className="btn" type="button" onClick={() => downloadCSV(copiedData, filename)}>
           ↓ {t('Download CSV')}

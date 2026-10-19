@@ -3,6 +3,7 @@ import { apiClient } from '../../lib/api';
 import { FISCAL_YEARS, type Transfer, type District, type UserProfile } from '../../types';
 import { fmtIN, formatDate } from '../../lib/format';
 import { AsOf, Money } from '../../components/Money';
+import { LoadError, Skeleton } from '../../components/LoadState';
 import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
 import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
@@ -64,16 +65,24 @@ export default function TransfersTab({ globalQuery = '', readOnly = false, refre
   });
 
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
+  const [loadError, setLoadError] = useState('');
   useEffect(() => { load(); }, [refreshKey]);
 
   async function load(): Promise<Transfer[]> {
-    const [stats, records, dStats, dRecords, people] = await Promise.all([
-      apiClient.transfers.stats(),
-      apiClient.transfers.records(),
-      apiClient.districts.stats(),
-      apiClient.districts.records(),
-      apiClient.users.list(),
-    ]);
+    let stats, records: Transfer[], dStats, dRecords, people;
+    try {
+      [stats, records, dStats, dRecords, people] = await Promise.all([
+        apiClient.transfers.stats(),
+        apiClient.transfers.records(),
+        apiClient.districts.stats(),
+        apiClient.districts.records(),
+        apiClient.users.list(),
+      ]);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Could not load the data');
+      return transfers;
+    }
+    setLoadError('');
     setTransferStats(stats);
     setTransfers(records);
     setDistrictStats(dStats);
@@ -312,6 +321,8 @@ async function handleTransferSave() {
     },
   ];
   const districtTransferCount = districtSections.reduce((count, section) => count + section.records.length, 0);
+
+  if (!transferStats) return loadError ? <LoadError message={loadError} onRetry={() => void load()} /> : <Skeleton cards={4} rows={8} label="Loading transfers…" />;
 
   return (
     <div className="tab-panel" id="tab-transfers">

@@ -8,6 +8,7 @@ import { formatDate } from '../../lib/format';
 import { STAGE_GLOSSARY } from '../../lib/status';
 import { STAGES, type Bill, type BillCategory, type UserProfile } from '../../types';
 import BillDrawer from './BillDrawer';
+import { useToast } from '../../components/Toast';
 import {
   EMPTY_FILTERS, SAVED_VIEWS, buildRegisterCsv, describeFilters, exportFilename, filterBills, paginate, sortBills,
   type RegisterFilters, type SortDir, type SortKey,
@@ -45,7 +46,7 @@ const Register = forwardRef<HTMLHeadingElement, Props>(function Register(
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
   const [openBillId, setOpenBillId] = useState<string | null>(null);
-  const [exportMessage, setExportMessage] = useState('');
+  const toast = useToast();
 
   const allFilters: RegisterFilters = { ...filters, stage };
   const ctx = { users, currentUserId, overdueDays, globalQuery };
@@ -78,12 +79,12 @@ const Register = forwardRef<HTMLHeadingElement, Props>(function Register(
   }
 
   function exportCsv() {
-    if (!filtered.length) { setExportMessage(t('There is no data to export.')); return; }
+    if (!filtered.length) { toast(t('There is no data to export.'), { kind: 'info' }); return; }
     if (filtered.length > EXPORT_CONFIRM_ROWS && !window.confirm(`${t('Export')} ${filtered.length} ${t('rows to CSV?')}`)) return;
     const now = new Date();
     const filename = exportFilename(now);
     downloadCSVText(buildRegisterCsv(filtered, users, filterText, now), filename);
-    setExportMessage(`${t('Exported')} ${filtered.length} ${t(filtered.length === 1 ? 'row' : 'rows')} ${t('to')} ${filename}.csv`);
+    toast(`${t('Exported')} ${filtered.length} ${t(filtered.length === 1 ? 'row' : 'rows')} ${t('to')} ${filename}.csv`);
   }
 
   const header = (key: SortKey, label: string, className = '') => {
@@ -111,7 +112,6 @@ const Register = forwardRef<HTMLHeadingElement, Props>(function Register(
           {!readOnly && <button className="btn primary" type="button" onClick={onAdd}>+ {t('Add bill')}</button>}
         </div>
       </div>
-      <p className="export-status" role="status">{exportMessage}</p>
 
       <div className="saved-views" role="group" aria-label={t('Saved views')}>
         {SAVED_VIEWS.map(v => {

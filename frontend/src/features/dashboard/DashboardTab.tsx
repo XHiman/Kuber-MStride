@@ -3,6 +3,7 @@ import { apiClient } from '../../lib/api';
 import type { Bill, UserProfile } from '../../types';
 import { useAppSettings } from '../../lib/appSettings';
 import WorkScope, { type DistrictRecord } from './WorkScope';
+import { LoadError, Skeleton } from '../../components/LoadState';
 
 interface PersonalDashboard {
   user: UserProfile;
@@ -28,6 +29,7 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
   const [allBills, setAllBills] = useState<Bill[] | null>(null);
   const [error, setError] = useState('');
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -42,7 +44,7 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
     Promise.all([apiClient.users.dashboard(), apiClient.bills.list()])
       .then(([data, bills]: [PersonalDashboard, Bill[]]) => { setDashboard(data); setAllBills(bills); setError(''); setLoadedAt(new Date()); })
       .catch(loadError => setError(loadError instanceof Error ? loadError.message : t('Could not load the dashboard.')));
-  }, [user?.id]);
+  }, [user?.id, retryKey]);
 
   if (!user) {
     if (sessionLoading) return <div className="panel"><p>{t('Checking your sign-in…')}</p></div>;
@@ -74,8 +76,8 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
       </div>
     );
   }
-  if (error) return <div className="panel"><p className="form-error" role="alert">{error}</p></div>;
-  if (!dashboard || !allBills) return <div className="panel"><p>{t('Loading your dashboard…')}</p></div>;
+  if (error) return <LoadError message={error} onRetry={() => { setError(''); setRetryKey(key => key + 1); }} />;
+  if (!dashboard || !allBills) return <Skeleton cards={4} rows={6} label="Loading your dashboard…" />;
 
   return (
     <WorkScope

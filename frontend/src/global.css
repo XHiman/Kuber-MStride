@@ -5221,3 +5221,109 @@ footer {
     overflow-wrap: anywhere;
   }
 }
+
+/* ── Microinteractions: toasts, skeletons, load errors (Step 10) ── */
+.toast-region {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+@media (max-width: 680px) {
+  .toast-region {
+    bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-1);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  font-size: 13px;
+  pointer-events: auto;
+  animation: toast-in 0.16s ease-out;
+}
+@keyframes toast-in {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.toast-success { border-left-color: var(--good); }
+.toast-error { border-left-color: var(--critical); }
+.toast-info { border-left-color: var(--accent); }
+.toast-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+.toast-success .toast-icon { color: var(--good-strong); }
+.toast-error .toast-icon { color: var(--critical-strong); }
+.toast-message {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.toast-action {
+  flex: none;
+  min-height: 30px;
+  font-weight: 600;
+}
+.toast-close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-2);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.toast-close:hover {
+  background: var(--surface-2);
+}
+
+.skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.skeleton-block {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.skeleton-card { height: 96px; }
+.skeleton-title { width: 30%; height: 18px; margin-bottom: 16px; }
+.skeleton-row { height: 14px; margin-bottom: 12px; }
+.load-error h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+.load-error p {
+  margin: 0 0 8px;
+}

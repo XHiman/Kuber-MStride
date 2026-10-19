@@ -2,6 +2,13 @@
 
 One entry per step of the UX / trust improvement plan.
 
+## Step 10 — Copy and microinteractions
+- **Loading skeletons** shaped like the content (KPI cards plus table rows) appear on the Bills, Budget, Transfers and Dashboard tabs while data loads. They are announced once as "Loading…", the shimmer stops under reduced motion, and the tab is marked `aria-busy` during refreshes.
+- **Error + Retry**: a failed load shows the server's reason, reassures the user that nothing they entered was lost, and offers a Retry button (checked by forcing a 503 on `/bills/dashboard`, then recovering). A refresh that fails while data is already on screen keeps that data and shows an error toast with Retry, instead of blanking the page.
+- **Toasts** (`components/Toast.tsx`) appear in a polite live region (errors use `role="alert"`). There's a success toast after Export CSV, stage moves, hold changes, assignment, saving and adding a bill. Toasts pause while hovered or focused, so keyboard users can reach the actions.
+- **Undo within 10 seconds** for stage moves, hold and release (from quick actions or the edit form) and assignment. Undo writes the previous values back with the note "Undo of previous change", so both changes stay in the audit trail (A5); the backend's financial-impact logic reverses budget and transfer effects. General field edits get a "Saved" toast without Undo. Covered by an integration test with a mocked API: move with a reason → toast → Undo → previous stage restored.
+- `alert()` popups are replaced by toasts. The Export button is labelled **Export CSV**, and the clipboard export is **Copy as CSV**.
+
 ## Step 9 — Accessibility (WCAG 2.1 AA)
 - New audit script `frontend/e2e/a11y-audit.mjs` runs axe-core (WCAG 2.0/2.1 A + AA) on all four tabs, the glossary dialog and the bill drawer, in **light and dark**, and checks for horizontal page scroll at **360 px** and at **200 % zoom**. Baseline: **252 failing nodes** and 2 reflow failures. After this step: **0 / 0**.
 - Contrast is fixed at the token level: light `--text-muted` #73736d → #62625c (≥ 5.0:1 on every surface, including the tinted accent and critical backgrounds); the eyebrow purple #997fde → #6a4cc0 (5.7:1); dark `--text-disabled` #686862 → #8a8a83; the footer credit uses muted text; and dark-theme accent fills (primary buttons, active tab number) use near-black ink, because white on #4a94e8 was only 3.1:1.

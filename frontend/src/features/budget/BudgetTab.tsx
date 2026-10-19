@@ -3,6 +3,7 @@ import { apiClient } from '../../lib/api';
 import type { BudgetRow } from '../../types';
 import { fmtIN, fmtShort, pct } from '../../lib/format';
 import { AsOf, Money } from '../../components/Money';
+import { LoadError, Skeleton } from '../../components/LoadState';
 import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
 
@@ -47,8 +48,16 @@ export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnl
   }, [pendingEdits.size]);
 
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
+  const [loadError, setLoadError] = useState('');
   async function load() {
-    const data = await apiClient.budget.get(fiscalYear);
+    let data;
+    try {
+      data = await apiClient.budget.get(fiscalYear);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Could not load the data');
+      return;
+    }
+    setLoadError('');
     setBudget(data);
     setRows(data.rows || []);
     setLoadedAt(new Date());
@@ -74,7 +83,7 @@ export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnl
     });
   }
 
-  if (!budget) return <div className="panel"><p>{t('Loading budget data…')}</p></div>;
+  if (!budget) return loadError ? <LoadError message={loadError} onRetry={() => void load()} /> : <Skeleton rows={8} label="Loading budget data…" />;
 
   const budgetHeads = new Map(
     (budget.budgetHeads || []).map((head: { code: string; name: string }) => [head.code, head.name]),

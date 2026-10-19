@@ -12,6 +12,8 @@ import AgingPanel from './AgingPanel';
 import NeedsActionPanel from './NeedsActionPanel';
 import Register from './Register';
 import ChangeNoteDialog from '../../components/ChangeNoteDialog';
+import { LoadError, Skeleton } from '../../components/LoadState';
+import { useToast } from '../../components/Toast';
 import { billRef } from './shared';
 import VendorChart from './VendorChart';
 
@@ -24,7 +26,10 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
   onLoaded?: (status: { lastChange: Date | null; loadedAt: Date }) => void;
 }) {
   const { t } = useAppSettings();
+  const toast = useToast();
   const [bills, setBills] = useState<Bill[]>([]);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadError, setLoadError] = useState('');
   const [users, setUsers] = useState<import('../../types').UserProfile[]>([]);
   const [dashboard, setDashboard] = useState<any>(null);
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
@@ -56,7 +61,19 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
   }
 
   async function load() {
-    const [billsData, dash, people] = await Promise.all([apiClient.bills.list(), apiClient.bills.dashboard(), apiClient.users.list()]);
+    setLoadState('loading');
+    let billsData: Bill[], dash: any, people: import('../../types').UserProfile[];
+    try {
+      [billsData, dash, people] = await Promise.all([apiClient.bills.list(), apiClient.bills.dashboard(), apiClient.users.list()]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not load the data';
+      setLoadError(message);
+      setLoadState('error');
+      // With data already on screen, keep it and report the failed refresh instead of blanking the page.
+      if (dashboard) toast(`${t('Could not refresh bills')}: ${t(message)}`, { kind: 'error', action: { label: t('Retry'), onAction: load } });
+      return;
+    }
+    setLoadState('ready');
     setBills(billsData);
     setMonthMoves(Object.values(movesInMonth(billsData)).reduce((sum, n) => sum + n, 0));
     setDashboard(dash);
@@ -71,12 +88,33 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
     try { localStorage.setItem('mitra-overdue-days', String(days)); } catch { /* storage unavailable; keep in memory */ }
   }
 
+  /** Runs a change, reloads, and offers a 10-second Undo that restores the previous values (history keeps both). */
+  async function changeWithUndo(bill: Bill, change: Partial<Bill> & { changeNote?: string }, undo: Partial<Bill>, message: string) {
+    await apiClient.bills.update(bill.id, change);
+    await load();
+    toast(message, {
+      action: {
+        label: t('Undo'),
+        onAction: async () => {
+          try {
+            await apiClient.bills.update(bill.id, { ...undo, changeNote: t('Undo of previous change') });
+            await load();
+            toast(t('Change undone'), { kind: 'info' });
+          } catch (error) {
+            toast(error instanceof Error ? t(error.message) : t('Could not undo the change.'), { kind: 'error' });
+          }
+        },
+      },
+    });
+  }
+
   async function handleAssign(bill: Bill, assignedUserId: string | null) {
     try {
-      await apiClient.bills.update(bill.id, { assignedUserId });
-      await load();
+      const name = users.find(user => user.id === assignedUserId)?.name;
+      await changeWithUndo(bill, { assignedUserId }, { assignedUserId: bill.assignedUserId },
+        name ? `${billRef(bill)} ${t('assigned to')} ${name}` : `${billRef(bill)} ${t('unassigned')}`);
     } catch (error) {
-      alert(error instanceof Error ? t(error.message) : t('Could not assign the bill.'));
+      toast(error instanceof Error ? t(error.message) : t('Could not assign the bill.'), { kind: 'error' });
     }
   }
 
@@ -100,24 +138,37 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
     if (!pendingChange) return;
     const { bill } = pendingChange;
     const changeNote = note || undefined;
-    if (pendingChange.kind === 'next') await apiClient.bills.update(bill.id, { bucket: pendingChange.to, changeNote });
-    else await apiClient.bills.update(bill.id, { onHold: false, holdReason: null, changeNote });
+    if (pendingChange.kind === 'next') {
+      await changeWithUndo(bill, { bucket: pendingChange.to, changeNote }, { bucket: bill.bucket },
+        `${billRef(bill)} ${t('moved to')} ${t(stageLabel(pendingChange.to))}`);
+    } else {
+      await changeWithUndo(bill, { onHold: false, holdReason: null, changeNote }, { onHold: true, holdReason: bill.holdReason },
+        `${t('Hold released on')} ${billRef(bill)}`);
+    }
     setPendingChange(null);
-    await load();
   }
 
   async function handleSave(data: Partial<Bill> & { changeNote?: string }) {
-    if (editingBill) {
+    if (editingBill?.id && editingBill.cat !== 'on_hold' && data.onHold) {
+      // Putting a bill on hold is a status change: offer Undo like the other quick actions.
+      await changeWithUndo(editingBill, data, { onHold: false, holdReason: null }, `${billRef(editingBill)} ${t('put on hold')}`);
+    } else if (editingBill?.id) {
       await apiClient.bills.update(editingBill.id, data);
+      await load();
+      toast(`${t('Saved changes to')} ${billRef(editingBill)}`);
     } else {
       await apiClient.bills.create(data);
+      await load();
+      toast(t('Bill added to the register'));
     }
-    await load();
     setShowModal(false);
   }
 
+  if (!dashboard && loadState === 'loading') return <Skeleton />;
+  if (!dashboard && loadState === 'error') return <LoadError message={loadError} onRetry={() => void load()} />;
+
   return (
-    <div className="tab-panel" id="tab-bills">
+    <div className="tab-panel" id="tab-bills" aria-busy={loadState === 'loading'}>
       {/* Process strip */}
       <div className="panel">
         <div className="panel-head">
