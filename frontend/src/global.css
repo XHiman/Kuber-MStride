@@ -4257,3 +4257,156 @@ footer {
     padding: 13px;
   }
 }
+/* ── Status language: glossary, stage terms, reason badges (Step 1) ── */
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent-strong);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.link-btn:focus-visible,
+.term:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.term {
+  position: relative;
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.term-tip {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 30;
+  width: max-content;
+  max-width: min(280px, 80vw);
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: normal;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+  visibility: hidden;
+  opacity: 0;
+}
+.term:hover .term-tip,
+.term:focus .term-tip {
+  visibility: visible;
+  opacity: 1;
+}
+
+.glossary-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-1);
+}
+.glossary-dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+.glossary-body {
+  padding: 20px 22px;
+}
+.glossary-body h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+.glossary-body h3 {
+  margin: 18px 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.glossary-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.glossary-list dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.glossary-list dt .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.glossary-list dd {
+  margin: 2px 0 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.reason-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.reason-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-pill);
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.reason-badge.is-unknown {
+  border-style: dashed;
+}
+.not-recorded {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.bill-stage-cell .reason-list {
+  display: flex;
+}
+
+.stage-card.is-empty .sname,
+.stage-card.is-empty .scount {
+  color: var(--text-muted);
+}
+.process-strip {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.glossary-head {
+  position: sticky;
+  top: -20px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -20px -22px 0;
+  padding: 16px 22px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.glossary-head h2 {
+  margin: 0;
+}

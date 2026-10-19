@@ -7,6 +7,8 @@ import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
 import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
 import { createPortal } from 'react-dom';
+import { GlossaryButton, ReasonBadges, RecordedText, StageTerm } from '../../components/StatusGlossary';
+import { REASONS, STAGE_GLOSSARY, deriveReasons, plural, stageLabel, isPlaceholder } from '../../lib/status';
 
 export default function BillsTab({ globalQuery = '', readOnly = false }: { globalQuery?: string; readOnly?: boolean }) {
   const { t } = useAppSettings();
@@ -106,6 +108,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
       'Amount Sanctioned': b.amountSanctioned ?? '',
       Stage: b.bucket,
       Status: b.cat,
+      'Action needed': deriveReasons(b).map(code => REASONS[code].label).join('; '),
       'Cleared FY': b.clearedFY || '',
       Attribute: b.attribute || '',
       Program: b.program || '',
@@ -123,7 +126,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
       <div className="panel">
         <div className="panel-head">
           <h2>{t('Bill clearance process')}</h2>
-          <span className="note">{t('six checkpoints tracked below, in order')}</span>
+          <span className="note">{t('six checkpoints tracked below, in order')} · <GlossaryButton /></span>
         </div>
         <ProcessStrip />
       </div>
@@ -200,15 +203,12 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
 }
 
 function ProcessStrip() {
-  const { t } = useAppSettings();
   return (
     <div className="process-strip">
-      {[
-        'Invoice Raised', 'PMC Check Pending', 'TFC Committee Approval', 'File Approval Pending', 'Sent to Treasury', 'Cleared by Treasury'
-      ].map((label, i) => (
-        <span key={i} className="p-step">
-          <span className="dot" style={{ background: `var(--stage-${i + 1})` }} />
-          {i + 1}. {t(label)}
+      {STAGE_GLOSSARY.map((entry, i) => (
+        <span key={entry.stage} className="p-step">
+          <span className="dot" style={{ background: `var(--stage-${i + 1})` }} aria-hidden="true" />
+          <StageTerm stage={entry.stage} index={i} />
         </span>
       ))}
     </div>
@@ -223,21 +223,24 @@ function StatStrip({ dashboard }: { dashboard: any }) {
   const onHoldAmt = dashboard.onHold.amount;
   const sgs = dashboard?.stages ?? {};
   const midPipeline = (sgs['TFC Committee Approval']?.amount || 0) + (sgs['File Approval Pending']?.amount || 0);
+  const billCount = dashboard.cleared.count + dashboard.inProgress.count + dashboard.onHold.count;
+  const bills = (n: number) => `${n} ${t(plural(n, 'bill'))}`;
+  const oldest = dashboard.oldestPending;
 
   return (
     <div className="stats">
       {[
-        { lbl: 'Total Invoice value', val: fmtShort(total), sub: `${Object.keys(sgs).length} stages` },
-        { lbl: 'Cleared by treasury', val: fmtShort(clearedAmt), sub: `${pct(clearedAmt, total)}% of total · ${dashboard.cleared.count} bills`, cls: 'good' },
-        { lbl: 'In pipeline', val: fmtShort(inProgAmt), sub: `${pct(inProgAmt, total)}% of total` },
-        { lbl: 'On hold / exception', val: fmtShort(onHoldAmt), sub: `${dashboard.onHold.count} bills need action`, cls: dashboard.onHold.count ? 'crit' : '' },
-        { lbl: 'Approved, mid-pipeline', val: fmtShort(midPipeline), sub: 'committee-cleared, not yet at treasury' },
-        { lbl: 'Oldest open bill', val: dashboard.oldestPending ? `${dashboard.oldestPending.days} days` : '—', sub: dashboard.oldestPending ? `${dashboard.oldestPending.vendor} · ${fmtShort(dashboard.oldestPending.amount)}` : '' },
+        { lbl: 'Total invoice value', val: fmtShort(total), sub: bills(billCount) },
+        { lbl: 'Cleared by treasury', val: fmtShort(clearedAmt), sub: `${pct(clearedAmt, total)}% ${t('of total')} · ${bills(dashboard.cleared.count)}`, cls: 'good' },
+        { lbl: 'In pipeline', val: fmtShort(inProgAmt), sub: `${pct(inProgAmt, total)}% ${t('of total')} · ${bills(dashboard.inProgress.count)}` },
+        { lbl: 'On hold / exception', val: fmtShort(onHoldAmt), sub: `${bills(dashboard.onHold.count)} ${t('on hold')}`, cls: dashboard.onHold.count ? 'crit' : '' },
+        { lbl: 'Committee-approved, awaiting next step', val: fmtShort(midPipeline), sub: t('TFC approval + file approval pending; not yet at treasury') },
+        { lbl: 'Oldest open bill', val: oldest ? `${oldest.days} ${t(plural(oldest.days, 'day'))}` : '—', sub: oldest ? `${oldest.vendor} · ${fmtShort(oldest.amount)} · ${t('excludes on-hold bills')}` : '' },
       ].map((s, i) => (
         <div key={i} className="stat">
           <div className="lbl">{t(s.lbl)}</div>
           <div className="val mono">{s.val}</div>
-          <div className={`sub ${s.cls || ''}`}>{t(s.sub)}</div>
+          <div className={`sub ${s.cls || ''}`}>{s.sub}</div>
         </div>
       ))}
     </div>
@@ -246,14 +249,7 @@ function StatStrip({ dashboard }: { dashboard: any }) {
 
 function StageRow({ dashboard }: { dashboard: any }) {
   const { t } = useAppSettings();
-  const stages = [
-    { key: 'Invoice Raised', short: 'Invoice raised' },
-    { key: 'PMC Check Pending', short: 'PMC check' },
-    { key: 'TFC Committee Approval', short: 'TFC approval' },
-    { key: 'File Approval Pending', short: 'File Pending' },
-    { key: 'Sent to Treasury', short: 'Sent to treasury' },
-    { key: 'Cleared by Treasury', short: 'Treasury clearance' },
-  ];
+  const stages = STAGE_GLOSSARY.map(entry => ({ key: entry.stage, short: entry.label }));
 
   const sgs = dashboard?.stages ?? {};
   const maxAmt = Math.max(...stages.map(s => sgs[s.key]?.amount || 0), 1);
@@ -264,14 +260,18 @@ function StageRow({ dashboard }: { dashboard: any }) {
         const a = sgs[s.key] ?? { amount: 0, count: 0, onHold: 0 };
         const pctW = Math.max(a.amount ? 4 : 0, Math.round(a.amount / maxAmt * 100));
         return (
-          <div key={i} className="stage-card">
+          <div key={i} className={`stage-card${a.count ? '' : ' is-empty'}`}>
             <span className="stop-row">
               <span className="snum">{t('STAGE')} {i + 1}</span>
-                {a.onHold > 0 && <span className="flag">{t('needs attention')}</span>}
+                {a.onHold > 0 && <span className="flag"><span aria-hidden="true">⚠ </span>{t('needs attention')}</span>}
             </span>
-            <span className="sname">{s.short}</span>
-            <span className="samt mono">{fmtShort(a.amount)}</span>
-            <span className="scount">{a.count} {t(a.count === 1 ? 'bill' : 'bills')}{a.onHold ? ` · ${a.onHold} ${t('on hold')}` : ''}</span>
+            <span className="sname">{t(s.short)}</span>
+            {a.count > 0
+              ? <>
+                <span className="samt mono">{fmtShort(a.amount)}</span>
+                <span className="scount">{a.count} {t(plural(a.count, 'bill'))}{a.onHold ? ` · ${a.onHold} ${t('on hold')}` : ''}</span>
+              </>
+              : <span className="scount">0 {t('bills')}, ₹0</span>}
             <div className="stage-bar-track">
               <div className="stage-bar-fill" style={{ width: `${pctW}%`, background: `var(--stage-${i + 1})` }} />
             </div>
@@ -384,12 +384,17 @@ function VendorPanel({ bills }: { bills: Bill[] }) {
 
 function ExceptionPanel({ bills, onEdit, readOnly }: { bills: Bill[]; onEdit: (bill: Bill) => void; readOnly: boolean }) {
   const { t } = useAppSettings();
+  // On-hold bills first, then any bill with a derived reason (missing data or no recorded status).
   const exceptions = useMemo(() => bills
-    .filter(b => b.cat === 'on_hold')
-    .sort((a, c) => (c._days || 0) - (a._days || 0)), [bills]);
+    .filter(b => b.cat === 'on_hold' || deriveReasons(b).length > 0)
+    .sort((a, c) => Number(c.cat === 'on_hold') - Number(a.cat === 'on_hold') || (c._days || 0) - (a._days || 0)), [bills]);
+  const heldCount = exceptions.filter(b => b.cat === 'on_hold').length;
   return (
     <div className="panel">
-      <div className="panel-head"><h2>{t('Needs Action')}</h2><span className="note">{exceptions.length} {t(exceptions.length === 1 ? 'bill' : 'bills')}</span></div>
+      <div className="panel-head">
+        <h2>{t('Needs action')}</h2>
+        <span className="note">{exceptions.length} {t(plural(exceptions.length, 'bill'))} · {heldCount} {t('on hold')}</span>
+      </div>
       <div className="exception-scroll">
       {exceptions.map(b => (
         <div
@@ -406,18 +411,23 @@ function ExceptionPanel({ bills, onEdit, readOnly }: { bills: Bill[]; onEdit: (b
           }}
         >
           <div className="exc-top">
-            <span>{b.vendor} · {b.invoice}</span>
+            <span>{b.vendor} · <RecordedText value={b.invoice} /></span>
             <span className="exc-amt mono">{fmtShort(billAmount(b))}</span>
           </div>
-          <div className="exc-note">{b.holdReason || b.note || t('No hold remark provided.')}</div>
+          <ReasonBadges bill={b} />
+          <div className="exc-note">
+            {b.cat === 'on_hold'
+              ? (b.holdReason || t('No hold remark provided.'))
+              : t(REASONS[deriveReasons(b)[0]]?.action ?? '')}
+          </div>
           <div className="exc-meta">
-            <span>{b.bucket}</span>
+            <span>{b.cat === 'on_hold' && <><span aria-hidden="true">⚠ </span>{t('On hold')} · </>}{t(stageLabel(b.bucket))}</span>
             {b._days !== null && b._days !== undefined && <span className="badge-days">{b._days}d</span>}
           </div>
         </div>
       ))}
       </div>
-      {exceptions.length === 0 && <EmptyState title={t('Nothing needs attention')} detail={t('On-hold bills will be listed here.')} />}
+      {exceptions.length === 0 && <EmptyState title={t('Nothing needs attention')} detail={t('On-hold bills and bills with missing details will be listed here.')} />}
     </div>
   );
 }
@@ -454,11 +464,11 @@ function AgingPanel({ bills, onEdit, readOnly }: { bills: Bill[]; onEdit: (bill:
                 role={readOnly ? undefined : 'button'}
               >
                 <td className="vendor-cell">{b.vendor}</td>
-                <td className="inv-cell mono">{b.invoice}</td>
+                <td className="inv-cell mono"><RecordedText value={b.invoice} /></td>
                 <td className="num mono">{b._days}</td>
                 <td className="num amt-cell mono">{fmtIN(billAmount(b))}</td>
-                <td><span className={`chip ${b.cat} ${stageClass(b.bucket)}`}><span className="dot" />{b.bucket}</span></td>
-                <td className="status-cell">{b.status}</td>
+                <td><StageChip bill={b} /></td>
+                <td className="status-cell"><RecordedText value={b.status} /> <ReasonBadges bill={b} /></td>
               </tr>
             ))}
             {/* {aging.length === 0 && (
@@ -574,17 +584,18 @@ function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit, on
           {bills.map((b: Bill) => (
             <tr key={b.id} className="bill-register-row">
               <td className="bill-register-cell vendor-cell">{b.vendor}</td>
-              <td className="bill-register-cell inv-cell mono">{b.invoice}</td>
+              <td className="bill-register-cell inv-cell mono"><RecordedText value={b.invoice} /></td>
               <td className="bill-register-cell mono">{b.efileNumber || '—'}</td>
               <td className="bill-register-cell mono">{b.date ? formatDate(b.date) : '—'}</td>
               <td className="bill-register-cell num amt-cell mono">{fmtIN(billAmount(b))}</td>
               <td className="bill-register-cell bill-stage-cell">
-                <span className={`chip ${b.cat} ${stageClass(b.bucket)}`}><span className="dot" />{b.bucket}</span>
+                <StageChip bill={b} />
+                <ReasonBadges bill={b} />
               </td>
               <td className="bill-register-cell">{b.program || b.district || '—'}</td>
               <td className="bill-register-cell">{users.find(user => user.id === b.assignedUserId)?.name || '—'}</td>
               <td className={`bill-register-cell status-cell ${readOnly ? '' : 'bill-attribute-cell'}`}>
-                <span className="bill-attribute-value" title={b.attribute || undefined}>{b.attribute || '—'}</span>
+                <span className="bill-attribute-value" title={b.attribute || undefined}><RecordedText value={b.attribute} /></span>
                 {!readOnly && <div className="bill-row-actions" aria-label={t('Bill actions')}>
                  {b.bucket !== STAGES[STAGES.length - 1] && (
   <button
@@ -592,7 +603,7 @@ function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit, on
     className="btn-icon"
     onClick={() => onNextStage(b)}
     title={t('Move to next stage')}
-    aria-label={`${t('Move to next stage')}: ${b.invoice}`}
+    aria-label={`${t('Move to next stage')}: ${billRef(b)}`}
   >
     ⇢
   </button>
@@ -607,7 +618,7 @@ function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit, on
         setHistoryBill(b);
       }}
       title={t('View History')}
-      aria-label={`View history for: ${b.invoice}`}
+      aria-label={`View history for: ${billRef(b)}`}
     >
       {/* History icon */}
       <svg
@@ -629,8 +640,8 @@ function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit, on
     </button>
 )}
 
-                  <button type="button" className="btn-icon" onClick={() => onToggleHold(b)} title={t(b.cat === 'on_hold' ? 'Release hold' : 'Put on hold')} aria-label={`${t(b.cat === 'on_hold' ? 'Release hold' : 'Put on hold')}: ${b.invoice}`}>{b.cat === 'on_hold' ? '▶' : 'Ⅱ'}</button>
-                  <button type="button" className="btn-icon" onClick={() => onEdit(b)} title={t('Edit')} aria-label={`${t('Edit')}: ${b.invoice}`}>✎</button>
+                  <button type="button" className="btn-icon" onClick={() => onToggleHold(b)} title={t(b.cat === 'on_hold' ? 'Release hold' : 'Put on hold')} aria-label={`${t(b.cat === 'on_hold' ? 'Release hold' : 'Put on hold')}: ${billRef(b)}`}>{b.cat === 'on_hold' ? '▶' : 'Ⅱ'}</button>
+                  <button type="button" className="btn-icon" onClick={() => onEdit(b)} title={t('Edit')} aria-label={`${t('Edit')}: ${billRef(b)}`}>✎</button>
                 </div>}
               </td>
             </tr>
@@ -1080,6 +1091,25 @@ function billAmount(bill: Bill): number {
     ?? (bill.bucket === 'Cleared by Treasury' && bill.amountSanctioned !== null
       ? bill.amountSanctioned
       : bill.amount);
+}
+
+/** Stage chip: colour + dot + glossary label, with an on-hold marker so status never relies on colour alone. */
+function StageChip({ bill }: { bill: Bill }) {
+  const { t } = useAppSettings();
+  const definition = STAGE_GLOSSARY.find(entry => entry.stage === bill.bucket)?.definition;
+  return (
+    <span className={`chip ${bill.cat} ${stageClass(bill.bucket)}`} title={definition ? t(definition) : undefined}>
+      <span className="dot" aria-hidden="true" />
+      {bill.cat === 'on_hold' && <span aria-hidden="true">⚠ </span>}
+      {t(stageLabel(bill.bucket))}
+      {bill.cat === 'on_hold' && <span className="sr-only"> · {t('On hold')}</span>}
+    </span>
+  );
+}
+
+/** Human reference for a bill in accessible names, tolerant of a missing invoice number. */
+function billRef(bill: Bill): string {
+  return isPlaceholder(bill.invoice) || !bill.invoice?.trim() ? bill.vendor : `${bill.vendor} ${bill.invoice}`;
 }
 
 function stageClass(bucket: string): string {

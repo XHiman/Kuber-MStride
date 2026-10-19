@@ -3,6 +3,7 @@ import { apiClient } from '../../lib/api';
 import type { Bill, UserProfile } from '../../types';
 import { fmtIN, fmtShort } from '../bills/utils';
 import { useAppSettings } from '../../lib/appSettings';
+import { ReasonBadges, RecordedText } from '../../components/StatusGlossary';
 
 interface PersonalDashboard {
   user: UserProfile;
@@ -99,8 +100,8 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
             <thead><tr><th>{t('Vendor')}</th><th>{t('Invoice')}</th><th>{t('Program')}</th><th>{t('District')}</th><th>{t('Current status')}</th><th className="num">{t('Amount')}</th></tr></thead>
             <tbody>
               {dashboard.bills.map(bill => <tr key={bill.id}>
-                <td className="vendor-cell">{bill.vendor}</td><td className="mono">{bill.invoice}</td>
-                <td>{bill.program || '—'}</td><td>{bill.district || '—'}</td><td>{bill.status}</td><td className="num mono">{fmtIN(bill.amount)}</td>
+                <td className="vendor-cell">{bill.vendor}</td><td className="mono"><RecordedText value={bill.invoice} /></td>
+                <td>{bill.program || '—'}</td><td>{bill.district || '—'}</td><td><RecordedText value={bill.status} /> <ReasonBadges bill={bill} /></td><td className="num mono">{fmtIN(bill.amount)}</td>
               </tr>)}
               {!dashboard.bills.length && <tr><td className="empty-table" colSpan={6}>{t('No bills are assigned to you or match your selected scope.')}</td></tr>}
             </tbody>
