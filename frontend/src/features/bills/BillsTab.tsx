@@ -9,7 +9,11 @@ import ExportActions from '../../components/ExportActions';
 import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
 import { createPortal } from 'react-dom';
 import { GlossaryButton, ReasonBadges, RecordedText, StageTerm } from '../../components/StatusGlossary';
-import { REASONS, STAGE_GLOSSARY, deriveReasons, plural, stageLabel, isPlaceholder } from '../../lib/status';
+import { REASONS, STAGE_GLOSSARY, deriveReasons, plural } from '../../lib/status';
+import { DEFAULT_OVERDUE_DAYS, isOverdue, parseThreshold } from '../../lib/aging';
+import AgingPanel from './AgingPanel';
+import NeedsActionPanel from './NeedsActionPanel';
+import { EmptyState, OverdueFlag, StageChip, billAmount, billRef, stageClass } from './shared';
 
 export default function BillsTab({ globalQuery = '', readOnly = false }: { globalQuery?: string; readOnly?: boolean }) {
   const { t } = useAppSettings();
@@ -21,8 +25,12 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
   const [vendorFilter, setVendorFilter] = useState('');
   const [stageFilter, setStageFilter] = useState('');
   const [catFilter, setCatFilter] = useState<BillCategory | ''>('');
-  const [sortBy, setSortBy] = useState<BillSortKey>('amount');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  // Oldest first by default, so the longest-waiting bills are seen first.
+  const [sortBy, setSortBy] = useState<BillSortKey>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [overdueDays, setOverdueDays] = useState(() => {
+    try { return parseThreshold(localStorage.getItem('mitra-overdue-days') ?? DEFAULT_OVERDUE_DAYS); } catch { return DEFAULT_OVERDUE_DAYS; }
+  });
   const [showModal, setShowModal] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
 
@@ -34,6 +42,20 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
     setDashboard(dash);
     setLoadedAt(new Date());
     setUsers(people);
+  }
+
+  function changeOverdueDays(days: number) {
+    setOverdueDays(days);
+    try { localStorage.setItem('mitra-overdue-days', String(days)); } catch { /* storage unavailable; keep in memory */ }
+  }
+
+  async function handleAssign(bill: Bill, assignedUserId: string | null) {
+    try {
+      await apiClient.bills.update(bill.id, { assignedUserId });
+      await load();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : t('Could not assign the bill.'));
+    }
   }
 
   async function handleNextStage(bill: Bill) {
@@ -75,6 +97,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
       });
     }
     rows.sort((a, c) => {
+      if (sortBy === 'date' && !a.date !== !c.date) return a.date ? -1 : 1;
       let av: any = sortBy === 'amount' ? billAmount(a) : a[sortBy as keyof Bill] ?? '';
       let cv: any = sortBy === 'amount' ? billAmount(c) : c[sortBy as keyof Bill] ?? '';
       if (typeof av === 'string') av = av.toLowerCase();
@@ -149,11 +172,27 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
       {/* Vendor + Exceptions */}
       <div className="grid-2">
         <VendorPanel bills={bills} asOf={loadedAt} />
-        <ExceptionPanel asOf={loadedAt} bills={bills} onEdit={bill => { setEditingBill(bill); setShowModal(true); }} readOnly={readOnly} />
+        <NeedsActionPanel
+          bills={bills}
+          users={users}
+          asOf={loadedAt}
+          threshold={overdueDays}
+          readOnly={readOnly}
+          onEdit={bill => { setEditingBill(bill); setShowModal(true); }}
+          onAssign={handleAssign}
+          onResolveHold={handleHoldToggle}
+        />
       </div>
 
       {/* Aging */}
-      <AgingPanel asOf={loadedAt} bills={bills} onEdit={bill => { setEditingBill(bill); setShowModal(true); }} readOnly={readOnly} />
+      <AgingPanel
+        bills={bills}
+        asOf={loadedAt}
+        threshold={overdueDays}
+        onThresholdChange={changeOverdueDays}
+        onOpen={bill => { setEditingBill(bill); setShowModal(true); }}
+        readOnly={readOnly}
+      />
 
       {/* Full register */}
       <div className="panel">
@@ -188,7 +227,8 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
           emptyMessage={bills.length === 0 ? t('No bills have been added yet. Use “Add bill” to start the register.') : t('No bills match the selected search or filters.')}
           sortBy={sortBy}
           sortDir={sortDir}
-          onSort={(k: BillSortKey) => { if (sortBy === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(k); setSortDir('desc'); } }}
+          overdueDays={overdueDays}
+          onSort={(k: BillSortKey) => { if (sortBy === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(k); setSortDir(k === 'date' ? 'asc' : 'desc'); } }}
           onEdit={(b: Bill) => { setEditingBill(b); setShowModal(true); }}
           onNextStage={bill => void handleNextStage(bill)}
           onToggleHold={bill => void handleHoldToggle(bill)}
@@ -388,113 +428,8 @@ function VendorPanel({ bills, asOf }: { bills: Bill[]; asOf: Date | null }) {
   );
 }
 
-function ExceptionPanel({ bills, onEdit, readOnly, asOf }: { bills: Bill[]; onEdit: (bill: Bill) => void; readOnly: boolean; asOf: Date | null }) {
-  const { t } = useAppSettings();
-  // On-hold bills first, then any bill with a derived reason (missing data or no recorded status).
-  const exceptions = useMemo(() => bills
-    .filter(b => b.cat === 'on_hold' || deriveReasons(b).length > 0)
-    .sort((a, c) => Number(c.cat === 'on_hold') - Number(a.cat === 'on_hold') || (c._days || 0) - (a._days || 0)), [bills]);
-  const heldCount = exceptions.filter(b => b.cat === 'on_hold').length;
-  return (
-    <div className="panel">
-      <div className="panel-head">
-        <h2>{t('Needs action')}</h2>
-        <span className="note">{exceptions.length} {t(plural(exceptions.length, 'bill'))} · {heldCount} {t('on hold')} · <AsOf at={asOf} /></span>
-      </div>
-      <div className="exception-scroll">
-      {exceptions.map(b => (
-        <div
-          key={b.id}
-          className={`exc-item${readOnly ? '' : ' clickable-bill'}`}
-          role={readOnly ? undefined : 'button'}
-          tabIndex={readOnly ? undefined : 0}
-          onClick={() => !readOnly && onEdit(b)}
-          onKeyDown={event => {
-            if (!readOnly && (event.key === 'Enter' || event.key === ' ')) {
-              event.preventDefault();
-              onEdit(b);
-            }
-          }}
-        >
-          <div className="exc-top">
-            <span>{b.vendor} · <RecordedText value={b.invoice} /></span>
-            <span className="exc-amt mono"><Money value={billAmount(b)} /></span>
-          </div>
-          <ReasonBadges bill={b} />
-          <div className="exc-note">
-            {b.cat === 'on_hold'
-              ? (b.holdReason || t('No hold remark provided.'))
-              : t(REASONS[deriveReasons(b)[0]]?.action ?? '')}
-          </div>
-          <div className="exc-meta">
-            <span>{b.cat === 'on_hold' && <><span aria-hidden="true">⚠ </span>{t('On hold')} · </>}{t(stageLabel(b.bucket))}</span>
-            {b._days !== null && b._days !== undefined && <span className="badge-days">{b._days}d</span>}
-          </div>
-        </div>
-      ))}
-      </div>
-      {exceptions.length === 0 && <EmptyState title={t('Nothing needs attention')} detail={t('On-hold bills and bills with missing details will be listed here.')} />}
-    </div>
-  );
-}
 
-function AgingPanel({ bills, onEdit, readOnly, asOf }: { bills: Bill[]; onEdit: (bill: Bill) => void; readOnly: boolean; asOf: Date | null }) {
-  const { t } = useAppSettings();
-  const aging = useMemo(() => bills
-    .filter(b => b.cat !== 'cleared' && b.cat !== 'on_hold' && b._days !== null && b._days !== undefined && b._days >= 0)
-    .sort((a, c) => (c._days || 0) - (a._days || 0))
-  , [bills]);
-  return (
-    <div className="panel">
-      <div className="panel-head"><h2>{t('Pending bills')}</h2><span className="note">{t('days since invoice raised, still uncleared')} · <AsOf at={asOf} /></span></div>
-      <div className="table-scroll pending-bills-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>{t('Vendor')}</th><th>{t('Invoice')}</th><th className="num">{t('Days pending')}</th><th className="num">{t('Amount')}</th><th>{t('Stage')}</th><th>{t('Current status')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {aging.map(b => (
-              <tr
-                key={b.id}
-                className={readOnly ? '' : 'clickable-bill'}
-                onClick={() => !readOnly && onEdit(b)}
-                onKeyDown={event => {
-                  if (!readOnly && (event.key === 'Enter' || event.key === ' ')) {
-                    event.preventDefault();
-                    onEdit(b);
-                  }
-                }}
-                tabIndex={readOnly ? undefined : 0}
-                role={readOnly ? undefined : 'button'}
-              >
-                <td className="vendor-cell">{b.vendor}</td>
-                <td className="inv-cell mono"><RecordedText value={b.invoice} /></td>
-                <td className="num mono">{b._days}</td>
-                <td className="num amt-cell mono"><Money value={billAmount(b)} /></td>
-                <td><StageChip bill={b} /></td>
-                <td className="status-cell"><RecordedText value={b.status} /> <ReasonBadges bill={b} /></td>
-              </tr>
-            ))}
-            {/* {aging.length === 0 && (
-              <tr><td className="empty-table" colSpan={6}>{t('No pending bills to age.')}</td></tr>
-            )} */}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
-function EmptyState({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="empty-state" role="status">
-      <span className="empty-mark" aria-hidden="true">—</span>
-      <span><strong>{title}</strong><small>{detail}</small></span>
-    </div>
-  );
-}
 
 type FiltersProps = {
   vendors: string[];
@@ -549,6 +484,7 @@ type BillSortKey = 'date' | 'amount';
     users: import('../../types').UserProfile[];
     sortBy: BillSortKey;
     sortDir: 'asc' | 'desc';
+    overdueDays: number;
     onSort: (key: BillSortKey) => void;
     onEdit: (bill: Bill) => void;
     onNextStage: (bill: Bill) => void;
@@ -556,7 +492,7 @@ type BillSortKey = 'date' | 'amount';
     readOnly: boolean;
   };
 
-function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit, onNextStage, onToggleHold, readOnly }: TableProps & { emptyMessage: string }) {
+function Table({ bills, users, emptyMessage, sortBy, sortDir, overdueDays, onSort, onEdit, onNextStage, onToggleHold, readOnly }: TableProps & { emptyMessage: string }) {
   const { t } = useAppSettings();
   const [historyBill, setHistoryBill] = useState<Bill | null>(null);
   const historyTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -592,7 +528,7 @@ function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit, on
               <td className="bill-register-cell vendor-cell">{b.vendor}</td>
               <td className="bill-register-cell inv-cell mono"><RecordedText value={b.invoice} /></td>
               <td className="bill-register-cell mono">{b.efileNumber || '—'}</td>
-              <td className="bill-register-cell mono">{formatDate(b.date)}</td>
+              <td className="bill-register-cell mono">{formatDate(b.date)}{isOverdue(b, overdueDays) && <><br /><OverdueFlag threshold={overdueDays} /></>}</td>
               <td className="bill-register-cell num amt-cell mono"><Money value={billAmount(b)} /></td>
               <td className="bill-register-cell bill-stage-cell">
                 <StageChip bill={b} />
@@ -1070,41 +1006,6 @@ function BillModal({ bill, onSave, onClose }: { bill: Bill | null; onSave: (data
   );
 }
 
-function billAmount(bill: Bill): number {
-  return bill.effectiveAmount
-    ?? (bill.bucket === 'Cleared by Treasury' && bill.amountSanctioned !== null
-      ? bill.amountSanctioned
-      : bill.amount);
-}
 
-/** Stage chip: colour + dot + glossary label, with an on-hold marker so status never relies on colour alone. */
-function StageChip({ bill }: { bill: Bill }) {
-  const { t } = useAppSettings();
-  const definition = STAGE_GLOSSARY.find(entry => entry.stage === bill.bucket)?.definition;
-  return (
-    <span className={`chip ${bill.cat} ${stageClass(bill.bucket)}`} title={definition ? t(definition) : undefined}>
-      <span className="dot" aria-hidden="true" />
-      {bill.cat === 'on_hold' && <span aria-hidden="true">⚠ </span>}
-      {t(stageLabel(bill.bucket))}
-      {bill.cat === 'on_hold' && <span className="sr-only"> · {t('On hold')}</span>}
-    </span>
-  );
-}
 
-/** Human reference for a bill in accessible names, tolerant of a missing invoice number. */
-function billRef(bill: Bill): string {
-  return isPlaceholder(bill.invoice) || !bill.invoice?.trim() ? bill.vendor : `${bill.vendor} ${bill.invoice}`;
-}
 
-function stageClass(bucket: string): string {
-  const stages = [
-    'Invoice Raised',
-    'PMC Check Pending',
-    'TFC Committee Approval',
-    'File Approval Pending',
-    'Sent to Treasury',
-    'Cleared by Treasury'
-  ];
-  const stage = stages.indexOf(bucket) + 1;
-  return stage > 0 ? `stage-${stage}` : 'stage-1';
-}

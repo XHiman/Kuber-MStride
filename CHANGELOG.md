@@ -2,6 +2,15 @@
 
 One entry per step of the UX / trust improvement plan.
 
+## Step 3 — Overdue and aging
+- New "Aging of open bills" panel with buckets for 0–30, 31–90, 91–180 and 180+ days, plus **No invoice date**. Each bucket shows its count and value and works as a filter toggle. All uncleared bills are counted, including on-hold ones; undated bills are shown, not dropped. On 19 Oct 2026 the split is 0 / 20 / 19 / 4 / 2, which adds up to the 45 open bills (checked by a test against the snapshot).
+- Overdue threshold setting (default 90 days, remembered per browser, kept between 1 and 3650). Rows over the threshold get a ⏱ **Overdue** flag with text in the register, the aging list and Needs action; 23 bills are overdue at 90 days.
+- The register now sorts **oldest first** by default, and undated bills always sort last.
+- Needs action cards show the bill, days open, stage (chip), owner (or "Unassigned") and the next action. When signed in, each card has an **Assign to…** selector and either **Mark resolved** (releases the hold after confirmation) or **Fix details** (opens the bill). These are covered by component tests with mocked handlers; they were not exercised against the live API.
+- Accessibility: list rows are no longer `role="button"` table rows. The vendor name in the aging list is a real button, and the tables have captions and `scope="col"`.
+- Fix: hidden glossary tooltips (from Step 1) were widening the page at 360 px.
+- Refactor: shared bill helpers moved to `features/bills/shared.tsx`; the aging and Needs action panels are in their own files.
+
 ## Step 2 — Money and dates
 - One money format in `lib/format.ts`: ₹24.07 Cr / ₹35.4 L / full figures below ₹1 L (₹53,880), with Indian grouping and "-₹" for negatives. The `<Money>` component applies it to KPI cards, stage cards, vendor totals, Needs action, the pending and register tables, transfers and the dashboard. The exact rupee figure is always in the tooltip.
 - New **Exact amounts** header toggle (remembered per browser) switches every `<Money>` to full rupee figures, so amounts can be reconciled. CSV exports and edit dialogs always use exact figures.
