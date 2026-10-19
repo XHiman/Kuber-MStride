@@ -22,6 +22,7 @@ backend/prisma/*.db-*
 backend/prisma/*.sqlite
 backend/prisma/*.sqlite-*
 backend/prisma/*backup*.json
+SCREENSHOTS/
 
 # Real-data test fixtures (never commit)
 *.local.json
