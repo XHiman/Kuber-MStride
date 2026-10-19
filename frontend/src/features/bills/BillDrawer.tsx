@@ -6,6 +6,7 @@ import { isOverdue } from '../../lib/aging';
 import { useAppSettings } from '../../lib/appSettings';
 import { formatDate, formatDateTime } from '../../lib/format';
 import { stageLabel } from '../../lib/status';
+import { maskAccountNumbers } from '../../lib/privacy';
 import { STAGES, type Bill, type UserProfile } from '../../types';
 import { DaysOpen, OverdueFlag, StageChip, VendorName, billAmount } from './shared';
 
@@ -18,6 +19,15 @@ type Props = {
   onEdit: (bill: Bill) => void;
   onNextStage: (bill: Bill) => void;
   onToggleHold: (bill: Bill) => void;
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  created: 'Bill created / imported',
+  tracked: 'Stage changed',
+  hold: 'Put on hold',
+  release: 'Hold released',
+  migration_snapshot: 'Imported snapshot',
+  legacy_backup_snapshot: 'Imported snapshot',
 };
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -60,7 +70,7 @@ export default function BillDrawer({ bill, users, overdueDays, readOnly, onClose
 
   const facts: [string, React.ReactNode][] = [
     ['Vendor (as recorded)', bill.vendor],
-    ['Invoice no.', <RecordedText value={bill.invoice} />],
+    ['Invoice no.', <RecordedText value={bill.invoice} reference />],
     ['E-file no.', bill.efileNumber || <span className="not-recorded">{t('Not recorded')}</span>],
     ['Invoice date', bill.date ? formatDate(bill.date) : <span className="not-recorded">{t('Not recorded')}</span>],
     ['Days open', bill.cat === 'cleared' ? t('Cleared') : <><DaysOpen days={bill._days} />{isOverdue(bill, overdueDays) && <> <OverdueFlag threshold={overdueDays} /></>}</>],
@@ -91,7 +101,7 @@ export default function BillDrawer({ bill, users, overdueDays, readOnly, onClose
           <section aria-labelledby={`${titleId}-status`}>
             <h3 id={`${titleId}-status`}>{t('Current status')}</h3>
             <p className="drawer-status"><RecordedText value={bill.status} /></p>
-            {bill.cat === 'on_hold' && <p className="drawer-hold"><strong>{t('On-hold remarks')}:</strong> {bill.holdReason || t('No hold remark provided.')}</p>}
+            {bill.cat === 'on_hold' && <p className="drawer-hold"><strong>{t('On-hold remarks')}:</strong> {bill.holdReason ? maskAccountNumbers(bill.holdReason) : t('No hold remark provided.')}</p>}
           </section>
 
           <section aria-labelledby={`${titleId}-timeline`}>
@@ -112,10 +122,11 @@ export default function BillDrawer({ bill, users, overdueDays, readOnly, onClose
                             {isCurrent && <span className="history-current-badge">{t('Current')}</span>}
                           </div>
                           <time className="history-event-time" dateTime={entry.enteredAt}>{formatDateTime(entry.enteredAt)}</time>
-                          <span className="history-event-source">
-                            {t(imported ? 'Imported snapshot' : entry.source === 'created' ? 'Bill created / imported' : 'Stage changed')}
-                            {' · '}{t('Changed by')}: <span className="not-recorded">{t('not recorded')}</span>
-                          </span>
+                          <dl className="history-audit">
+                            <div><dt>{t('What')}</dt><dd>{t(EVENT_LABELS[entry.source] ?? (imported ? 'Imported snapshot' : 'Stage changed'))}</dd></div>
+                            <div><dt>{t('Who')}</dt><dd>{entry.changedByName || <span className="not-recorded">{t('not recorded')}</span>}</dd></div>
+                            <div><dt>{t('Why')}</dt><dd>{entry.note ? maskAccountNumbers(entry.note) : <span className="not-recorded">{t('no note')}</span>}</dd></div>
+                          </dl>
                         </div>
                       </li>
                     );

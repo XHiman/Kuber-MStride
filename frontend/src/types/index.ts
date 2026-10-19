@@ -36,6 +36,7 @@ export interface Bill {
   clearedFY: string | null;
   source: string;
   stageHistory: BillStageHistoryEntry[];
+  updatedAt?: string;
   _days?: number | null;
   _clearedFY?: string | null;
 }
@@ -44,7 +45,12 @@ export interface BillStageHistoryEntry {
   id: string;
   stage: string;
   enteredAt: string;
+  /** created | tracked (stage move) | hold | release | migration_snapshot | legacy_backup_snapshot */
   source: string;
+  /** Who made the change; absent on older records and older API versions. */
+  changedByName?: string | null;
+  /** Why, as entered by the user. */
+  note?: string | null;
 }
 
 export interface BudgetRow {

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useAppSettings } from '../lib/appSettings';
 import { ON_HOLD_DEFINITION, REASONS, STAGE_GLOSSARY, deriveReasons, isPlaceholder, placeholderRemainder } from '../lib/status';
 import type { Bill } from '../types';
+import { maskAccountNumbers } from '../lib/privacy';
 
 /** "What do these mean?" link that opens the stage and reason glossary in a modal dialog. */
 export function GlossaryButton() {
@@ -89,11 +90,15 @@ export function ReasonBadges({ bill, max = 2 }: { bill: Bill; max?: number }) {
   );
 }
 
-/** Free-text field that may hold the imported "Please Check" placeholder. */
-export function RecordedText({ value, empty = '—' }: { value: string | null | undefined; empty?: string }) {
+/**
+ * Free-text field that may hold the imported "Please Check" placeholder. Account-like numbers are masked,
+ * except for `reference` fields (invoice numbers), which are codes rather than personal data.
+ */
+export function RecordedText({ value, empty = '—', reference = false }: { value: string | null | undefined; empty?: string; reference?: boolean }) {
   const { t } = useAppSettings();
-  if (!isPlaceholder(value)) return <>{value?.trim() || empty}</>;
-  const rest = placeholderRemainder(value);
+  const shown = reference ? value : maskAccountNumbers(value);
+  if (!isPlaceholder(shown)) return <>{shown?.trim() || empty}</>;
+  const rest = placeholderRemainder(shown);
   return (
     <>
       <span className="not-recorded">{t('Not recorded')}</span>

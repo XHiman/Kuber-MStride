@@ -1,6 +1,11 @@
 import { IsString, IsNumber, IsOptional, IsDateString, IsBoolean } from 'class-validator';
 
 export class CreateBillDto {
+  /** Optional note recorded on the bill's first history entry. */
+  @IsString()
+  @IsOptional()
+  changeNote?: string;
+
   @IsString()
   vendor!: string;
 
@@ -87,6 +92,11 @@ export class CreateBillDto {
 }
 
 export class UpdateBillDto {
+  /** Why the stage or hold state changed; recorded in the bill history, not stored on the bill. */
+  @IsString()
+  @IsOptional()
+  changeNote?: string;
+
   @IsString()
   @IsOptional()
   vendor?: string;

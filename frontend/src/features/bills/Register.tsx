@@ -189,7 +189,7 @@ const Register = forwardRef<HTMLHeadingElement, Props>(function Register(
                     <VendorName vendor={b.vendor} /><span className="sr-only"> · {t('open details')}</span>
                   </button>
                 </td>
-                <td className="inv-cell mono"><RecordedText value={b.invoice} /></td>
+                <td className="inv-cell mono"><RecordedText value={b.invoice} reference /></td>
                 <td className="mono">{b.efileNumber || '—'}</td>
                 <td className="mono">{formatDate(b.date)}</td>
                 <td className="num mono">

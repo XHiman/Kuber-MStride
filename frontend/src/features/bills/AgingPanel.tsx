@@ -91,7 +91,7 @@ export default function AgingPanel({ bills, asOf, threshold, onThresholdChange, 
                 <td className="vendor-cell">
                   {readOnly ? <VendorName vendor={b.vendor} /> : <button type="button" className="link-btn" onClick={() => onOpen(b)} aria-label={`${t('Edit')}: ${billRef(b)}`}><VendorName vendor={b.vendor} /></button>}
                 </td>
-                <td className="inv-cell mono"><RecordedText value={b.invoice} /></td>
+                <td className="inv-cell mono"><RecordedText value={b.invoice} reference /></td>
                 <td className="num mono">
                   <DaysOpen days={b._days} />
                   {isOverdue(b, threshold) && <><br /><OverdueFlag threshold={threshold} /></>}

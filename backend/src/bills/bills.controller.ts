@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Query, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Query, Param, Body, UseGuards, Req } from '@nestjs/common';
 import { BillsService, BillCategory } from './bills.service';
 import { CreateBillDto, UpdateBillDto } from './dto/bill.dto';
 import { UserSessionGuard } from '../users/user-session.guard';
@@ -32,18 +32,20 @@ export class BillsController {
 
   @Post()
   @UseGuards(UserSessionGuard)
-  async create(@Body() dto: CreateBillDto) {
+  async create(@Body() dto: CreateBillDto, @Req() req: { userId?: string }) {
+    const { changeNote, ...bill } = dto;
     return this.billsService.create({
-      ...dto,
+      ...bill,
       date: dto.date ? new Date(dto.date) : null,
       clearedFY: null,
-    });
+    }, await this.billsService.actorFor(req.userId), changeNote);
   }
 
   @Put(':id')
   @UseGuards(UserSessionGuard)
-  async update(@Param('id') id: string, @Body() dto: UpdateBillDto) {
-    return this.billsService.update(id, dto);
+  async update(@Param('id') id: string, @Body() dto: UpdateBillDto, @Req() req: { userId?: string }) {
+    const { changeNote, ...changes } = dto;
+    return this.billsService.update(id, changes, await this.billsService.actorFor(req.userId), changeNote);
   }
 
   @Delete(':id')

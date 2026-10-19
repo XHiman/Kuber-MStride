@@ -5,6 +5,7 @@ import TransfersTab from './features/transfers/TransfersTab';
 import DashboardTab from './features/dashboard/DashboardTab';
 import { AppSettingsContext, translate, type Language, type Theme } from './lib/appSettings';
 import { apiClient } from './lib/api';
+import { formatDateTime } from './lib/format';
 import type { GlobalSearchResult, UserProfile } from './types';
 
 type Tab = 'bills' | 'budget' | 'transfers' | 'dashboard';
@@ -27,6 +28,9 @@ export default function App() {
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem('mitra-language') === 'mr' ? 'mr' : 'en');
   const [exactAmounts, setExactAmounts] = useState(() => localStorage.getItem('mitra-exact-amounts') === '1');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  // Data freshness for the header: when bill records last changed and when this page loaded them.
+  const [dataStatus, setDataStatus] = useState<{ lastChange: Date | null; loadedAt: Date } | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [userSessionChecked, setUserSessionChecked] = useState(false);
   const [dismissReadOnlyNotice, setDismissReadOnlyNotice] = useState(false);
   const [globalQuery, setGlobalQuery] = useState('');
@@ -139,6 +143,16 @@ export default function App() {
             {t('MahaSTRIDE financial operations workspace')}
             <span className="creator-credit">{t('A project by Sandesh & XHiman')}</span>
           </p>
+          <p className="data-status" aria-live="polite">
+            {dataStatus
+              ? <>
+                <span>{t('Last updated')}: <time dateTime={dataStatus.lastChange?.toISOString()}>{formatDateTime(dataStatus.lastChange)}</time></span>
+                <span>{t('Loaded')} <time dateTime={dataStatus.loadedAt.toISOString()}>{formatDateTime(dataStatus.loadedAt)}</time></span>
+              </>
+              : <span>{t('Loading data…')}</span>}
+            <span>{t('Source: MahaSTRIDE tracker database; figures refresh when the page loads')}</span>
+            <button type="button" className="link-btn" onClick={() => setRefreshKey(key => key + 1)}>{t('Refresh data')}</button>
+          </p>
         </div>
         <div className="appearance-controls">
           <div className="setting-group" role="group" aria-label={t('Appearance')}>
@@ -241,9 +255,9 @@ export default function App() {
             tabIndex={0}
             hidden={activeTab !== tab.id}
           >
-            {tab.id === 'bills' && <BillsTab globalQuery={globalQuery} readOnly={!userSessionChecked || !currentUser} currentUserId={currentUser?.id ?? null} />}
-            {tab.id === 'budget' && <BudgetTab globalQuery={globalQuery} initialFiscalYear={budgetFiscalYear} readOnly={!userSessionChecked || !currentUser} />}
-            {tab.id === 'transfers' && <TransfersTab globalQuery={globalQuery} readOnly={!userSessionChecked || !currentUser} />}
+            {tab.id === 'bills' && <BillsTab globalQuery={globalQuery} readOnly={!userSessionChecked || !currentUser} currentUserId={currentUser?.id ?? null} refreshKey={refreshKey} onLoaded={setDataStatus} />}
+            {tab.id === 'budget' && <BudgetTab globalQuery={globalQuery} initialFiscalYear={budgetFiscalYear} readOnly={!userSessionChecked || !currentUser} refreshKey={refreshKey} />}
+            {tab.id === 'transfers' && <TransfersTab globalQuery={globalQuery} readOnly={!userSessionChecked || !currentUser} refreshKey={refreshKey} />}
             {tab.id === 'dashboard' && (
               <DashboardTab
                 user={currentUser}

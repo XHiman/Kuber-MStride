@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Bill, Prisma } from '@prisma/client';
 import { classifyStatus, daysPending, clearedFYOf, extractClearDate, fiscalYearOf, normalizeStageBucket } from '../common/bill-utils';
 import { aggregateBills } from '../common/bill-stats';
+import { historyEvents, type Actor } from './bill-history';
 
 export type BillCategory = 'cleared' | 'in_progress' | 'on_hold';
 
@@ -11,7 +12,7 @@ export interface BillWithComputed extends Omit<Bill, 'date'> {
   _days: number | null;
   _clearedFY: string | null;
   effectiveAmount: number;
-  stageHistory: { id: string; stage: string; enteredAt: string; source: string }[];
+  stageHistory: { id: string; stage: string; enteredAt: string; source: string; changedByName: string | null; note: string | null }[];
 }
 
 @Injectable()
@@ -69,6 +70,8 @@ export class BillsService {
           stage: normalizeStageBucket(entry.stage),
           enteredAt: entry.enteredAt.toISOString(),
           source: entry.source,
+          changedByName: entry.changedByName,
+          note: entry.note,
         })),
       };
     });
@@ -95,13 +98,24 @@ export class BillsService {
         stage: normalizeStageBucket(entry.stage),
         enteredAt: entry.enteredAt.toISOString(),
         source: entry.source,
+        changedByName: entry.changedByName,
+        note: entry.note,
       })),
     };
+  }
+
+  /** Snapshot of the signed-in user for the audit trail. */
+  async actorFor(userId: string | undefined): Promise<Actor | null> {
+    if (!userId) return null;
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true } });
+    return user ? { id: user.id, name: user.name } : null;
   }
 
   async create(
   data: Omit<Bill, 'id' | 'createdAt' | 'updatedAt' | 'budgetCode' | 'objectHead' | 'transferId' | 'program' | 'district' | 'assignedUserId' | 'amountSanctioned' | 'onHold' | 'holdReason' | 'efileNumber'> &
     Partial<Pick<Bill, 'budgetCode' | 'objectHead' | 'transferId' | 'program' | 'district' | 'assignedUserId' | 'amountSanctioned' | 'onHold' | 'holdReason' | 'efileNumber'>>,
+  actor: Actor | null = null,
+  changeNote?: string,
 ): Promise<Bill> {
   const cls = this.classifyBill(data.status, data.bucket);
   const onHold = cls.cat !== 'cleared' && (data.onHold || data.cat === 'on_hold');
@@ -119,9 +133,9 @@ export class BillsService {
         clearedFY: cls.cat === 'cleared' ? this.clearanceFiscalYear(data.status) : null,
       },
     });
-    await tx.billStageHistory.create({
-      data: { billId: bill.id, stage: bill.bucket, source: 'created' },
-    });
+    for (const event of historyEvents(null, bill, actor, changeNote)) {
+      await tx.billStageHistory.create({ data: { billId: bill.id, ...event } });
+    }
     await this.applyFinancialImpact(tx, null, bill);
     return bill;
   });
@@ -131,7 +145,9 @@ export class BillsService {
   id: string,
   data: Partial<Omit<Bill, 'id' | 'createdAt' | 'updatedAt' | 'date'>> & {
     date?: Date | string | null;
-  }
+  },
+  actor: Actor | null = null,
+  changeNote?: string,
 ): Promise<Bill> {
   return this.prisma.$transaction(async (tx) => {
     const previous = await tx.bill.findUniqueOrThrow({ where: { id } });
@@ -172,10 +188,8 @@ export class BillsService {
       where: { id },
       data: updateData,
     });
-    if (bill.bucket !== previous.bucket) {
-      await tx.billStageHistory.create({
-        data: { billId: bill.id, stage: bill.bucket },
-      });
+    for (const event of historyEvents(previous, bill, actor, changeNote)) {
+      await tx.billStageHistory.create({ data: { billId: bill.id, ...event } });
     }
     await this.applyFinancialImpact(tx, previous, bill);
     return bill;

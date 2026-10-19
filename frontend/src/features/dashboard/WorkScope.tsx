@@ -91,7 +91,7 @@ export default function WorkScope({ user, bills, districtRecords, loadedAt, onLo
               {visible.map(bill => (
                 <tr key={bill.id}>
                   <td className="vendor-cell"><VendorName vendor={bill.vendor} /></td>
-                  <td className="mono"><RecordedText value={bill.invoice} /></td>
+                  <td className="mono"><RecordedText value={bill.invoice} reference /></td>
                   <td className="num mono">
                     <DaysOpen days={bill._days} />
                     {isOverdue(bill, DEFAULT_OVERDUE_DAYS) && <><br /><OverdueFlag threshold={DEFAULT_OVERDUE_DAYS} /></>}

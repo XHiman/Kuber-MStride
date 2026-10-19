@@ -6,6 +6,9 @@ import { TransfersService, type DistrictFund, type TransferInput } from '../tran
 import { UserAuthService } from '../users/user-auth.service';
 import { USER_ROLES, type UserRole } from '../users/user-role';
 
+/** Changes made from the admin panel are attributed to the administrator in bill history. */
+const ADMIN_ACTOR = { id: 'admin', name: 'Administrator (admin panel)' };
+
 export type AdminEntity =
   | 'bills'
   | 'budgets'
@@ -151,7 +154,7 @@ export class AdminService {
       ], ['date', 'createdAt', 'updatedAt']),
       billStageHistory: Number(backup.version) >= 4
         ? this.backupRows(tables, 'billStageHistory', [
-            'id', 'billId', 'stage', 'enteredAt', 'source',
+            'id', 'billId', 'stage', 'enteredAt', 'source', 'changedById', 'changedByName', 'note',
           ], ['enteredAt'])
         : [],
       transferHistory: this.backupRows(tables, 'transferHistory', [
@@ -290,7 +293,7 @@ export class AdminService {
           program: this.nullableString(value.program),
           district: this.nullableString(value.district),
           assignedUserId: this.nullableString(value.assignedUserId),
-        });
+        }, ADMIN_ACTOR);
         return bill;
       }
       case 'budgets': {
@@ -397,7 +400,7 @@ export class AdminService {
         return this.bills.update(id, {
           ...value,
           ...(this.hasOwn(value, 'date') ? { date: this.date(value.date) } : {}),
-        } as Parameters<BillsService['update']>[1]);
+        } as Parameters<BillsService['update']>[1], ADMIN_ACTOR);
       }
       case 'budgets': {
         const value = this.pick(input, [

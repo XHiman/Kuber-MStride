@@ -6,6 +6,7 @@ import { REASONS, STAGE_GLOSSARY, deriveReasons, stageLabel } from '../../lib/st
 import { STAGES, type Bill, type BillCategory, type UserProfile } from '../../types';
 import { billAmount } from './shared';
 import { normaliseVendor } from '../../lib/vendors';
+import { maskAccountNumbers } from '../../lib/privacy';
 
 export type SavedViewId = '' | 'mine' | 'overdue' | 'on_hold' | 'cleared_fy';
 export const SAVED_VIEWS: { id: SavedViewId; label: string }[] = [
@@ -123,11 +124,12 @@ export function exportRows(bills: Bill[], users: UserProfile[]): Record<string, 
     Status: b.cat,
     'Action needed': deriveReasons(b).map(code => REASONS[code].label).join('; '),
     'Cleared FY': b.clearedFY || '',
-    'Payment attribute': b.attribute || '',
+    'Payment attribute': maskAccountNumbers(b.attribute) || '',
     Program: b.program || '',
     District: b.district || '',
     'Assigned to': users.find(user => user.id === b.assignedUserId)?.name || '',
-    'Hold remark': b.holdReason || '',
+    'Hold remark': maskAccountNumbers(b.holdReason) || '',
+    'Current status': maskAccountNumbers(b.status) || '',
     'Stage history': (b.stageHistory || []).map(entry => `${stageLabel(entry.stage)}: ${formatDateTime(entry.enteredAt)}`).join(' | '),
   }));
 }

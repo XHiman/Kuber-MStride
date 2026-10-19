@@ -2,6 +2,7 @@ import { useId, useMemo, useState } from 'react';
 import { AsOf, Money } from '../../components/Money';
 import { ReasonBadges, RecordedText } from '../../components/StatusGlossary';
 import { isOverdue } from '../../lib/aging';
+import { maskAccountNumbers } from '../../lib/privacy';
 import { useAppSettings } from '../../lib/appSettings';
 import { REASONS, deriveReasons, plural } from '../../lib/status';
 import type { Bill, UserProfile } from '../../types';
@@ -15,7 +16,7 @@ type Props = {
   readOnly: boolean;
   onEdit: (bill: Bill) => void;
   onAssign: (bill: Bill, userId: string | null) => Promise<void>;
-  onResolveHold: (bill: Bill) => Promise<void>;
+  onResolveHold: (bill: Bill) => void | Promise<void>;
 };
 
 /** On-hold bills first, then bills with missing data, each with owner, next action and controls. */
@@ -50,10 +51,10 @@ function ActionCard({ bill: b, users, threshold, readOnly, onEdit, onAssign, onR
   const reason = deriveReasons(b)[0];
   const owner = users.find(user => user.id === b.assignedUserId)?.name;
   const nextAction = held
-    ? (b.holdReason ? `${t('Resolve:')} ${b.holdReason}` : t('No hold remark provided.'))
+    ? (b.holdReason ? `${t('Resolve:')} ${maskAccountNumbers(b.holdReason)}` : t('No hold remark provided.'))
     : t(REASONS[reason]?.action ?? '');
 
-  async function run(action: () => Promise<void>) {
+  async function run(action: () => void | Promise<void>) {
     setBusy(true);
     try { await action(); } finally { setBusy(false); }
   }
@@ -61,7 +62,7 @@ function ActionCard({ bill: b, users, threshold, readOnly, onEdit, onAssign, onR
   return (
     <li className={`exc-item${held ? ' is-held' : ''}`}>
       <div className="exc-top">
-        <span><VendorName vendor={b.vendor} /> · <RecordedText value={b.invoice} /></span>
+        <span><VendorName vendor={b.vendor} /> · <RecordedText value={b.invoice} reference /></span>
         <span className="exc-amt mono"><Money value={billAmount(b)} /></span>
       </div>
       <ReasonBadges bill={b} />
@@ -89,9 +90,7 @@ function ActionCard({ bill: b, users, threshold, readOnly, onEdit, onAssign, onR
                 type="button"
                 className="btn"
                 disabled={busy}
-                onClick={() => {
-                  if (window.confirm(`${t('Mark as resolved and release the hold on')} ${billRef(b)}?`)) void run(() => onResolveHold(b));
-                }}
+                onClick={() => void run(() => onResolveHold(b))}
               >
                 {t('Mark resolved')}
               </button>

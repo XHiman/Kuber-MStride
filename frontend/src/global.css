@@ -5103,3 +5103,67 @@ footer {
 .show-all {
   margin-top: 10px;
 }
+
+/* ── Trust and audit (Step 8) ── */
+.data-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.data-status time {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.history-audit {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+.history-audit > div {
+  display: contents;
+}
+.history-audit dt {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.history-audit dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.note-dialog {
+  width: min(480px, calc(100vw - 32px));
+  padding: 20px 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-1);
+}
+.note-dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+.note-dialog h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+.note-dialog-desc {
+  margin: 0 0 14px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.note-dialog label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.note-dialog textarea {
+  width: 100%;
+  min-height: 84px;
+  box-sizing: border-box;
+}

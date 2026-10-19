@@ -8,7 +8,7 @@ import ExportActions from '../../components/ExportActions';
 
 const BUDGET_CODE_ORDER = ['01', '06', '10', '11', '13', '14', '16', '17', '21', '24', '26', '27', '28', '31'];
 
-export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnly = false }: { globalQuery?: string; initialFiscalYear?: string; readOnly?: boolean }) {
+export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnly = false, refreshKey = 0 }: { globalQuery?: string; initialFiscalYear?: string; readOnly?: boolean; refreshKey?: number }) {
   const { t } = useAppSettings();
   const [budget, setBudget] = useState<any>(null);
   const [rows, setRows] = useState<BudgetRow[]>([]);
@@ -19,7 +19,7 @@ export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnl
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [refreshAfterEdits, setRefreshAfterEdits] = useState(false);
 
-  useEffect(() => { load(); }, [fiscalYear]);
+  useEffect(() => { load(); }, [fiscalYear, refreshKey]);
   useEffect(() => {
     const refreshBudget = () => {
       if (pendingEdits.size > 0) {

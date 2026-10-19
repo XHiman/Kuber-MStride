@@ -50,6 +50,10 @@ model BillStageHistory {
   stage     String
   enteredAt DateTime @default(now())
   source    String   @default("tracked")
+  /// Who made the change (snapshot of the user name, so history survives user deletion) and why.
+  changedById   String?
+  changedByName String?
+  note          String?
   bill      Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
 
   @@index([billId, enteredAt])

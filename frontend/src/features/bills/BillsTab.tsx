@@ -6,14 +6,23 @@ import { AsOf, Money } from '../../components/Money';
 import { useAppSettings } from '../../lib/appSettings';
 import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
 import { GlossaryButton, StageIcon, StageTerm } from '../../components/StatusGlossary';
-import { STAGE_GLOSSARY, STAGE_SLUGS, movesInMonth, plural, stageFromSlug } from '../../lib/status';
+import { STAGE_GLOSSARY, STAGE_SLUGS, movesInMonth, plural, stageFromSlug, stageLabel } from '../../lib/status';
 import { DEFAULT_OVERDUE_DAYS, parseThreshold } from '../../lib/aging';
 import AgingPanel from './AgingPanel';
 import NeedsActionPanel from './NeedsActionPanel';
 import Register from './Register';
+import ChangeNoteDialog from '../../components/ChangeNoteDialog';
+import { billRef } from './shared';
 import VendorChart from './VendorChart';
 
-export default function BillsTab({ globalQuery = '', readOnly = false, currentUserId = null }: { globalQuery?: string; readOnly?: boolean; currentUserId?: string | null }) {
+export default function BillsTab({ globalQuery = '', readOnly = false, currentUserId = null, refreshKey = 0, onLoaded }: {
+  globalQuery?: string;
+  readOnly?: boolean;
+  currentUserId?: string | null;
+  refreshKey?: number;
+  /** Reports data freshness to the page header. */
+  onLoaded?: (status: { lastChange: Date | null; loadedAt: Date }) => void;
+}) {
   const { t } = useAppSettings();
   const [bills, setBills] = useState<Bill[]>([]);
   const [users, setUsers] = useState<import('../../types').UserProfile[]>([]);
@@ -28,8 +37,9 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
   });
   const [showModal, setShowModal] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
+  const [pendingChange, setPendingChange] = useState<{ kind: 'next'; bill: Bill; to: string } | { kind: 'release'; bill: Bill } | null>(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [refreshKey]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -50,8 +60,10 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
     setBills(billsData);
     setMonthMoves(Object.values(movesInMonth(billsData)).reduce((sum, n) => sum + n, 0));
     setDashboard(dash);
-    setLoadedAt(new Date());
+    const now = new Date();
+    setLoadedAt(now);
     setUsers(people);
+    onLoaded?.({ lastChange: latestChange(billsData), loadedAt: now });
   }
 
   function changeOverdueDays(days: number) {
@@ -68,32 +80,33 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
     }
   }
 
-  async function handleNextStage(bill: Bill) {
+  // Stage moves and hold releases are confirmed in a dialog that asks why (recorded in the audit trail).
+  function handleNextStage(bill: Bill) {
     const currentIndex = STAGES.indexOf(bill.bucket);
     if (currentIndex < 0 || currentIndex >= STAGES.length - 1) return;
-    try {
-      await apiClient.bills.update(bill.id, { bucket: STAGES[currentIndex + 1] });
-      await load();
-    } catch (error) {
-      alert(error instanceof Error ? error.message : t('Could not advance the bill stage.'));
-    }
+    setPendingChange({ kind: 'next', bill, to: STAGES[currentIndex + 1] });
   }
 
-  async function handleHoldToggle(bill: Bill) {
+  function handleHoldToggle(bill: Bill) {
     if (bill.cat !== 'on_hold') {
       setEditingBill({ ...bill, onHold: true, holdReason: '' });
       setShowModal(true);
       return;
     }
-    try {
-      await apiClient.bills.update(bill.id, { onHold: false, holdReason: null });
-      await load();
-    } catch (error) {
-      alert(error instanceof Error ? error.message : t('Could not update the bill hold.'));
-    }
+    setPendingChange({ kind: 'release', bill });
   }
 
-  async function handleSave(data: Partial<Bill>) {
+  async function confirmChange(note: string) {
+    if (!pendingChange) return;
+    const { bill } = pendingChange;
+    const changeNote = note || undefined;
+    if (pendingChange.kind === 'next') await apiClient.bills.update(bill.id, { bucket: pendingChange.to, changeNote });
+    else await apiClient.bills.update(bill.id, { onHold: false, holdReason: null, changeNote });
+    setPendingChange(null);
+    await load();
+  }
+
+  async function handleSave(data: Partial<Bill> & { changeNote?: string }) {
     if (editingBill) {
       await apiClient.bills.update(editingBill.id, data);
     } else {
@@ -172,9 +185,32 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
         onToggleHold={bill => void handleHoldToggle(bill)}
       />
 
+      {pendingChange && (
+        <ChangeNoteDialog
+          title={t(pendingChange.kind === 'next' ? 'Move to next stage' : 'Release hold')}
+          description={pendingChange.kind === 'next'
+            ? `${billRef(pendingChange.bill)}: ${t(stageLabel(pendingChange.bill.bucket))} → ${t(stageLabel(pendingChange.to))}`
+            : `${billRef(pendingChange.bill)}: ${t('the bill returns to normal processing at')} ${t(stageLabel(pendingChange.bill.bucket))}`}
+          confirmLabel={t(pendingChange.kind === 'next' ? 'Move bill' : 'Release hold')}
+          onConfirm={confirmChange}
+          onCancel={() => setPendingChange(null)}
+        />
+      )}
       {showModal && <BillModal key={editingBill?.id ?? 'new'} bill={editingBill} onSave={handleSave} onClose={() => setShowModal(false)} />}
     </div>
   );
+}
+
+/** Most recent change to any bill record (its updatedAt, or its latest history entry). */
+function latestChange(bills: Bill[]): Date | null {
+  let latest = 0;
+  for (const bill of bills) {
+    for (const value of [bill.updatedAt, ...(bill.stageHistory ?? []).map(entry => entry.enteredAt)]) {
+      const time = value ? Date.parse(value) : NaN;
+      if (!Number.isNaN(time) && time > latest) latest = time;
+    }
+  }
+  return latest ? new Date(latest) : null;
 }
 
 function ProcessStrip() {
@@ -284,7 +320,7 @@ function StageRow({ dashboard, bills, activeStage, onSelect }: { dashboard: any;
 
 
 
-function BillModal({ bill, onSave, onClose }: { bill: Bill | null; onSave: (data: Partial<Bill>) => Promise<void>; onClose: () => void }) {
+function BillModal({ bill, onSave, onClose }: { bill: Bill | null; onSave: (data: Partial<Bill> & { changeNote?: string }) => Promise<void>; onClose: () => void }) {
   const { t } = useAppSettings();
   const dialogRef = useRef<HTMLFormElement>(null);
   const [transfers, setTransfers] = useState<any[]>([]);
@@ -293,6 +329,7 @@ function BillModal({ bill, onSave, onClose }: { bill: Bill | null; onSave: (data
   const [entityType, setEntityType] = useState<ProgramDistrictType>(bill?.district ? 'district' : 'program');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [changeNote, setChangeNote] = useState('');
   const [form, setForm] = useState({
     vendor: bill?.vendor || '',
     invoice: bill?.invoice || '',
@@ -343,6 +380,7 @@ function BillModal({ bill, onSave, onClose }: { bill: Bill | null; onSave: (data
         program: form.program.trim() || null,
         district: form.district.trim() || null,
         assignedUserId: form.assignedUserId || null,
+        changeNote: changeNote.trim() || undefined,
       });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : t('Failed to save bill. Please try again.'));
@@ -514,6 +552,10 @@ function BillModal({ bill, onSave, onClose }: { bill: Bill | null; onSave: (data
                 />
               </div>
             )}
+          </div>
+          <div className="field bill-field-wide">
+            <label htmlFor="bill-change-note">{t('Reason for change')} <span className="note">({t('optional, saved in the bill history when the stage or hold changes')})</span></label>
+            <textarea id="bill-change-note" maxLength={500} value={changeNote} onChange={event => setChangeNote(event.target.value)} />
           </div>
         </div>
         {saveError && <p className="bill-save-error" role="alert">{saveError}</p>}

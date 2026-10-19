@@ -14,7 +14,7 @@ const DISTRICT_BUDGET_MAPPING: Record<DistrictFund, { budgetCode: string; object
   consultants_grant: { budgetCode: 'A233', objectCode: '10' },
 };
 
-export default function TransfersTab({ globalQuery = '', readOnly = false }: { globalQuery?: string; readOnly?: boolean }) {
+export default function TransfersTab({ globalQuery = '', readOnly = false, refreshKey = 0 }: { globalQuery?: string; readOnly?: boolean; refreshKey?: number }) {
   const { t } = useAppSettings();
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [transferStats, setTransferStats] = useState<any>(null);
@@ -64,7 +64,7 @@ export default function TransfersTab({ globalQuery = '', readOnly = false }: { g
   });
 
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [refreshKey]);
 
   async function load(): Promise<Transfer[]> {
     const [stats, records, dStats, dRecords, people] = await Promise.all([
