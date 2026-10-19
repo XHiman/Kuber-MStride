@@ -208,6 +208,7 @@ body {
 
   font-family:
     "IBM Plex Sans",
+    "Noto Sans Devanagari",
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
@@ -257,6 +258,7 @@ h3 {
 .mono {
   font-family:
     "IBM Plex Mono",
+    "Noto Sans Devanagari",
     ui-monospace,
     SFMono-Regular,
     Menlo,
@@ -569,7 +571,7 @@ header h1 {
   border-radius: 10px;
   background: var(--surface-2);
   color: var(--text-muted);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: "IBM Plex Mono", "Noto Sans Devanagari", ui-monospace, monospace;
   font-size: 11px;
   font-weight: 700;
 }
@@ -2024,8 +2026,8 @@ tr.tot-row td {
 .bill-register-table .bill-col-vendor { width: 142px; }
 .bill-register-table .bill-col-invoice { width: 100px; }
 .bill-register-table .bill-col-efile { width: 80px; }
-.bill-register-table .bill-col-date { width: 78px; }
-.bill-register-table .bill-col-amount { width: 128px; }
+.bill-register-table .bill-col-date { width: 104px; }
+.bill-register-table .bill-col-amount { width: 104px; }
 .bill-register-table .bill-col-stage { width: 184px; }
 .bill-register-table .bill-col-entity { width: 120px; }
 .bill-register-table .bill-col-assignee { width: 135px; }
@@ -2959,7 +2961,7 @@ footer {
     flex: 1;
     color: var(--text-muted);
     content: attr(data-label);
-    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-family: "IBM Plex Sans", "Noto Sans Devanagari", system-ui, sans-serif;
     font-size: 10px;
     font-weight: 650;
     text-align: left;
@@ -4409,4 +4411,26 @@ footer {
 }
 .glossary-head h2 {
   margin: 0;
+}
+
+/* ── Money and dates (Step 2) ── */
+.money {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.money[title] {
+  cursor: help;
+}
+.as-of {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.as-of-row {
+  margin: 6px 2px 14px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+.stats-group > .stats {
+  margin-bottom: 0;
 }

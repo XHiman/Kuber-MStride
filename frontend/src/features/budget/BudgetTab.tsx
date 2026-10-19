@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../../lib/api';
 import type { BudgetRow } from '../../types';
-import { fmtIN, fmtShort, pct } from '../bills/utils';
+import { fmtIN, fmtShort, pct } from '../../lib/format';
+import { AsOf, Money } from '../../components/Money';
 import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
 
@@ -45,10 +46,12 @@ export default function BudgetTab({ globalQuery = '', initialFiscalYear, readOnl
     }
   }, [pendingEdits.size]);
 
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   async function load() {
     const data = await apiClient.budget.get(fiscalYear);
     setBudget(data);
     setRows(data.rows || []);
+    setLoadedAt(new Date());
   }
 
   const effectiveRows = useMemo(() => rows.map(row => ({
@@ -266,12 +269,12 @@ function collapsedSummary(
       {/* Budget stats */}
       <div className="stats" style={{whiteSpace: 'pre-line'}}>
         {[
-          { lbl: `${t('Total approved budget')}\n(${fiscalYear})`, val: fmtShort(grandProv), sub: '3451-A215 + A224 + A233' },
-          { lbl: 'Total expenditure to date\n\n', val: fmtShort(grandExp), sub: `${pct(grandExp, grandRelease)}% ${t('utilized')}` },
-          { lbl: `A215 -\n${headLabel('A215','PMU establishment')}`, val: fmtShort(totals.prov215), sub: `${fmtShort(totals.exp215)} ${t('spent')} · ${pct(totals.exp215, totals.prov215)}%` },
-          { lbl: `A224 -\n${headLabel('A224', 'IPF (World Bank)')}`, val: fmtShort(totals.prov224), sub: `${fmtShort(totals.exp224)} ${t('spent')} · ${pct(totals.exp224, totals.prov224)}%` },
-          { lbl: `A233 -\n${headLabel('A233', 'PforR (state share)')}`, val: fmtShort(totals.prov233), sub: `${fmtShort(totals.exp233)} ${t('spent')} · ${pct(totals.exp233, totals.prov233)}%` },
-          { lbl: 'Balance remaining\n\n', val: fmtShort(grandBal), sub: `${pct(grandBal, grandRelease)}% ${t('of release')}` },
+          { lbl: `${t('Total approved budget')}\n(${fiscalYear})`, val: <Money value={grandProv} />, sub: '3451-A215 + A224 + A233' },
+          { lbl: 'Total expenditure to date\n\n', val: <Money value={grandExp} />, sub: `${pct(grandExp, grandRelease)}% ${t('utilized')}` },
+          { lbl: `A215 -\n${headLabel('A215','PMU establishment')}`, val: <Money value={totals.prov215} />, sub: `${fmtShort(totals.exp215)} ${t('spent')} · ${pct(totals.exp215, totals.prov215)}%` },
+          { lbl: `A224 -\n${headLabel('A224', 'IPF (World Bank)')}`, val: <Money value={totals.prov224} />, sub: `${fmtShort(totals.exp224)} ${t('spent')} · ${pct(totals.exp224, totals.prov224)}%` },
+          { lbl: `A233 -\n${headLabel('A233', 'PforR (state share)')}`, val: <Money value={totals.prov233} />, sub: `${fmtShort(totals.exp233)} ${t('spent')} · ${pct(totals.exp233, totals.prov233)}%` },
+          { lbl: 'Balance remaining\n\n', val: <Money value={grandBal} />, sub: `${pct(grandBal, grandRelease)}% ${t('of release')}` },
         ].map((s, i) => (
           <div key={i} className="stat">
             <div className="lbl">{t(s.lbl)}</div>
@@ -280,6 +283,7 @@ function collapsedSummary(
           </div>
         ))}
       </div>
+      <p className="as-of-row"><AsOf at={loadedAt} /> · {fiscalYear}</p>
 
       {/* Budget table */}
       <div className="panel">
@@ -479,9 +483,9 @@ function collapsedSummary(
         </div>
         <div className="stats n4">
           {[
-            { lbl: fiscalYear === 'FY Total' ? t('Cleared across fiscal years') : `${t('Cleared in')} ${fiscalYear}`, val: fmtShort(budget.fyCrossCheck?.clearedFYAmt || 0), sub: `${budget.fyCrossCheck?.clearedFYCount || 0} ${t('bills')} ${t('from register')}`, cls: 'good' },
-            { lbl: 'vs. EXPEND-sheet expenditure', val: fmtShort(grandExp), sub: 'from the object-code table above' },
-            { lbl: 'Cleared in other FYs (excluded)', val: fmtShort(budget.fyCrossCheck?.otherFYAmt || 0), sub: budget.fyCrossCheck?.otherFYCount ? `${budget.fyCrossCheck.otherFYCount} ${t('bills')}` : 'none so far' },
+            { lbl: fiscalYear === 'FY Total' ? t('Cleared across fiscal years') : `${t('Cleared in')} ${fiscalYear}`, val: <Money value={budget.fyCrossCheck?.clearedFYAmt || 0} />, sub: `${budget.fyCrossCheck?.clearedFYCount || 0} ${t('bills')} ${t('from register')}`, cls: 'good' },
+            { lbl: 'vs. EXPEND-sheet expenditure', val: <Money value={grandExp} />, sub: 'from the object-code table above' },
+            { lbl: 'Cleared in other FYs (excluded)', val: <Money value={budget.fyCrossCheck?.otherFYAmt || 0} />, sub: budget.fyCrossCheck?.otherFYCount ? `${budget.fyCrossCheck.otherFYCount} ${t('bills')}` : 'none so far' },
             { lbl: 'Not yet cleared', val: budget.fyCrossCheck?.notCleared || 0, sub: 'still in the pipeline' },
           ].map((s, i) => (
             <div key={i} className="stat">

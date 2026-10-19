@@ -25,6 +25,7 @@ export default function App() {
       : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem('mitra-language') === 'mr' ? 'mr' : 'en');
+  const [exactAmounts, setExactAmounts] = useState(() => localStorage.getItem('mitra-exact-amounts') === '1');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [userSessionChecked, setUserSessionChecked] = useState(false);
   const [dismissReadOnlyNotice, setDismissReadOnlyNotice] = useState(false);
@@ -41,6 +42,10 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('mitra-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('mitra-exact-amounts', exactAmounts ? '1' : '0');
+  }, [exactAmounts]);
 
   useEffect(() => {
     document.documentElement.lang = language === 'mr' ? 'mr' : 'en';
@@ -114,7 +119,7 @@ export default function App() {
   const BASE_URL = import.meta.env.BASE_URL;
 
   return (
-    <AppSettingsContext.Provider value={{ language, t }}>
+    <AppSettingsContext.Provider value={{ language, t, exactAmounts }}>
     <div className="wrap">
       <header>
         <div className="logo">
@@ -141,6 +146,14 @@ export default function App() {
             <div className="setting-switch">
               <button type="button" className="btn setting-btn" aria-label={t(theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode')} aria-pressed={theme === 'dark'} onClick={() => setTheme(value => value === 'light' ? 'dark' : 'light')}>
                 <span aria-hidden="true">{theme === 'dark' ? '☾' : '☼'}</span> {t(theme === 'dark' ? 'Dark' : 'Light')}
+              </button>
+            </div>
+          </div>
+          <div className="setting-group" role="group" aria-label={t('Amounts')}>
+            <span>{t('Amounts')}</span>
+            <div className="setting-switch">
+              <button type="button" className={`btn setting-btn ${exactAmounts ? 'selected' : ''}`} aria-pressed={exactAmounts} onClick={() => setExactAmounts(value => !value)} title={t('Show exact rupee figures instead of Cr / L')}>
+                {t('Exact amounts')}
               </button>
             </div>
           </div>

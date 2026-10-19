@@ -6,12 +6,21 @@ export type Theme = 'light' | 'dark';
 type AppSettings = {
   language: Language;
   t: (text: string) => string;
+  /** Show exact rupee figures instead of the Cr / L display format. */
+  exactAmounts?: boolean;
 };
 
 const translations: Record<string, string> = {
   'Financial workspaces': 'आर्थिक कार्यक्षेत्रे',
   // Step 1 — status language. TODO: review Marathi wording with a native speaker.
   'What do these mean?': 'याचा अर्थ काय?',
+  // Step 2 — money and dates. TODO: review Marathi wording.
+  'As of': 'या वेळेनुसार',
+  'Amounts': 'रक्कम',
+  'Exact amounts': 'अचूक रक्कम',
+  'Show exact rupee figures instead of Cr / L': 'कोटी / लाख ऐवजी अचूक रुपये दाखवा',
+  'Bill totals': 'बिलांची एकूण रक्कम',
+  'percentages are of total invoice value': 'टक्केवारी एकूण बीजक मूल्याच्या तुलनेत',
   'Close': 'बंद करा',
   'Status glossary': 'स्थिती शब्दसूची',
   'Pipeline stages': 'प्रक्रियेचे टप्पे',

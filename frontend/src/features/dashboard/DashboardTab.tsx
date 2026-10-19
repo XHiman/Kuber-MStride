@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { apiClient } from '../../lib/api';
 import type { Bill, UserProfile } from '../../types';
-import { fmtIN, fmtShort } from '../bills/utils';
+import { fmtShort, formatDate } from '../../lib/format';
+import { AsOf, Money } from '../../components/Money';
 import { useAppSettings } from '../../lib/appSettings';
 import { ReasonBadges, RecordedText } from '../../components/StatusGlossary';
 
@@ -27,6 +28,7 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
   const { t } = useAppSettings();
   const [dashboard, setDashboard] = useState<PersonalDashboard | null>(null);
   const [error, setError] = useState('');
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -38,7 +40,7 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
       return;
     }
     apiClient.users.dashboard()
-      .then((data: PersonalDashboard) => { setDashboard(data); setError(''); })
+      .then((data: PersonalDashboard) => { setDashboard(data); setError(''); setLoadedAt(new Date()); })
       .catch(loadError => setError(loadError instanceof Error ? loadError.message : t('Could not load the dashboard.')));
   }, [user?.id]);
 
@@ -86,12 +88,13 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
         <div className="stats n5">
           {[
             { label: 'Pending tasks / bills', value: dashboard.pendingTasks, detail: `${dashboard.onHoldBills} ${t('on hold')}` },
-            { label: 'Pending bill value', value: fmtShort(dashboard.pendingAmount), detail: t('across your assigned scope') },
+            { label: 'Pending bill value', value: <Money value={dashboard.pendingAmount} />, detail: t('across your assigned scope') },
             { label: 'Bills cleared', value: dashboard.clearedBillCount, detail: `${fmtShort(dashboard.clearedAmount)} ${t('cleared value')}` },
             { label: 'Bills in your scope', value: dashboard.bills.length, detail: t('assigned or matching your program/district') },
             { label: 'District records', value: dashboard.districtRecords.length, detail: t('in your selected districts') },
           ].map(card => <div className="stat" key={card.label}><div className="lbl">{t(card.label)}</div><div className="val mono">{card.value}</div><div className="sub">{card.detail}</div></div>)}
         </div>
+        <p className="as-of-row"><AsOf at={loadedAt} /></p>
       </div>
       <div className="panel">
         <div className="panel-head"><h2>{t('Bills in your scope')}</h2><span className="note">{dashboard.bills.length} {t('records')}</span></div>
@@ -101,7 +104,7 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
             <tbody>
               {dashboard.bills.map(bill => <tr key={bill.id}>
                 <td className="vendor-cell">{bill.vendor}</td><td className="mono"><RecordedText value={bill.invoice} /></td>
-                <td>{bill.program || '—'}</td><td>{bill.district || '—'}</td><td><RecordedText value={bill.status} /> <ReasonBadges bill={bill} /></td><td className="num mono">{fmtIN(bill.amount)}</td>
+                <td>{bill.program || '—'}</td><td>{bill.district || '—'}</td><td><RecordedText value={bill.status} /> <ReasonBadges bill={bill} /></td><td className="num mono"><Money value={bill.amount} /></td>
               </tr>)}
               {!dashboard.bills.length && <tr><td className="empty-table" colSpan={6}>{t('No bills are assigned to you or match your selected scope.')}</td></tr>}
             </tbody>
@@ -112,7 +115,7 @@ export default function DashboardTab({ user, sessionLoading, onLogin, onLogout }
         <div className="panel">
           <div className="panel-head"><h2>{t('District records')}</h2></div>
           <div className="table-scroll"><table><thead><tr><th>{t('District')}</th><th>{t('Division')}</th><th>{t('Release date')}</th><th className="num">{t('Amount released')}</th></tr></thead>
-            <tbody>{dashboard.districtRecords.map(record => <tr key={record.id}><td>{record.district}</td><td>{record.division}</td><td>{record.releaseDate || '—'}</td><td className="num mono">{fmtIN(record.amount)}</td></tr>)}</tbody>
+            <tbody>{dashboard.districtRecords.map(record => <tr key={record.id}><td>{record.district}</td><td>{record.division}</td><td>{formatDate(record.releaseDate)}</td><td className="num mono"><Money value={record.amount} /></td></tr>)}</tbody>
           </table></div>
         </div>
       )}

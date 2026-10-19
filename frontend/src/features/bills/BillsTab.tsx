@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useRef, type KeyboardEvent, type MutableRefObject } from 'react';
 import { apiClient } from '../../lib/api';
 import { STAGES, type Bill } from '../../types';
-import { fmtIN, fmtShort, pct } from '../bills/utils';
+import { fmtShort, formatDate, formatDateTime, pct } from '../../lib/format';
+import { AsOf, Money } from '../../components/Money';
 import { BillCategory } from '../../types';
 import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
@@ -15,6 +16,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
   const [bills, setBills] = useState<Bill[]>([]);
   const [users, setUsers] = useState<import('../../types').UserProfile[]>([]);
   const [dashboard, setDashboard] = useState<any>(null);
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [search, setSearch] = useState('');
   const [vendorFilter, setVendorFilter] = useState('');
   const [stageFilter, setStageFilter] = useState('');
@@ -30,6 +32,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
     const [billsData, dash, people] = await Promise.all([apiClient.bills.list(), apiClient.bills.dashboard(), apiClient.users.list()]);
     setBills(billsData);
     setDashboard(dash);
+    setLoadedAt(new Date());
     setUsers(people);
   }
 
@@ -132,25 +135,25 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
       </div>
 
       {/* Stats */}
-      {dashboard?.stages && <StatStrip dashboard={dashboard} />}
+      {dashboard?.stages && <StatStrip dashboard={dashboard} asOf={loadedAt} />}
 
       {/* Pipeline stages */}
       <div className="panel">
         <div className="panel-head">
           <h2>{t('Bills by pipeline stage')}</h2>
-          <span className="note">{t('value currently sitting at each checkpoint (not cumulative)')}</span>
+          <span className="note">{t('value currently sitting at each checkpoint (not cumulative)')} · <AsOf at={loadedAt} /></span>
         </div>
         <StageRow dashboard={dashboard} />
       </div>
 
       {/* Vendor + Exceptions */}
       <div className="grid-2">
-        <VendorPanel bills={bills} />
-        <ExceptionPanel bills={bills} onEdit={bill => { setEditingBill(bill); setShowModal(true); }} readOnly={readOnly} />
+        <VendorPanel bills={bills} asOf={loadedAt} />
+        <ExceptionPanel asOf={loadedAt} bills={bills} onEdit={bill => { setEditingBill(bill); setShowModal(true); }} readOnly={readOnly} />
       </div>
 
       {/* Aging */}
-      <AgingPanel bills={bills} onEdit={bill => { setEditingBill(bill); setShowModal(true); }} readOnly={readOnly} />
+      <AgingPanel asOf={loadedAt} bills={bills} onEdit={bill => { setEditingBill(bill); setShowModal(true); }} readOnly={readOnly} />
 
       {/* Full register */}
       <div className="panel">
@@ -193,7 +196,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
         />
         <div className="reg-foot">
           <span>{t('"#" renumbers with your current filter/sort · click Date / Amount to sort · hover a row for actions')}</span>
-          <span>{t('Filtered total')}: {fmtIN(filtered.reduce((s, b) => s + billAmount(b), 0))}</span>
+          <span>{t('Filtered total')}: <Money value={filtered.reduce((s, b) => s + billAmount(b), 0)} /></span>
         </div>
       </div>
 
@@ -215,7 +218,7 @@ function ProcessStrip() {
   );
 }
 
-function StatStrip({ dashboard }: { dashboard: any }) {
+function StatStrip({ dashboard, asOf }: { dashboard: any; asOf: Date | null }) {
   const { t } = useAppSettings();
   const total = dashboard.total;
   const clearedAmt = dashboard.cleared.amount;
@@ -228,13 +231,14 @@ function StatStrip({ dashboard }: { dashboard: any }) {
   const oldest = dashboard.oldestPending;
 
   return (
+    <section className="stats-group" aria-label={t('Bill totals')}>
     <div className="stats">
       {[
-        { lbl: 'Total invoice value', val: fmtShort(total), sub: bills(billCount) },
-        { lbl: 'Cleared by treasury', val: fmtShort(clearedAmt), sub: `${pct(clearedAmt, total)}% ${t('of total')} · ${bills(dashboard.cleared.count)}`, cls: 'good' },
-        { lbl: 'In pipeline', val: fmtShort(inProgAmt), sub: `${pct(inProgAmt, total)}% ${t('of total')} · ${bills(dashboard.inProgress.count)}` },
-        { lbl: 'On hold / exception', val: fmtShort(onHoldAmt), sub: `${bills(dashboard.onHold.count)} ${t('on hold')}`, cls: dashboard.onHold.count ? 'crit' : '' },
-        { lbl: 'Committee-approved, awaiting next step', val: fmtShort(midPipeline), sub: t('TFC approval + file approval pending; not yet at treasury') },
+        { lbl: 'Total invoice value', val: <Money value={total} />, sub: bills(billCount) },
+        { lbl: 'Cleared by treasury', val: <Money value={clearedAmt} />, sub: `${pct(clearedAmt, total)}% ${t('of total')} · ${bills(dashboard.cleared.count)}`, cls: 'good' },
+        { lbl: 'In pipeline', val: <Money value={inProgAmt} />, sub: `${pct(inProgAmt, total)}% ${t('of total')} · ${bills(dashboard.inProgress.count)}` },
+        { lbl: 'On hold / exception', val: <Money value={onHoldAmt} />, sub: `${bills(dashboard.onHold.count)} ${t('on hold')}`, cls: dashboard.onHold.count ? 'crit' : '' },
+        { lbl: 'Committee-approved, awaiting next step', val: <Money value={midPipeline} />, sub: t('TFC approval + file approval pending; not yet at treasury') },
         { lbl: 'Oldest open bill', val: oldest ? `${oldest.days} ${t(plural(oldest.days, 'day'))}` : '—', sub: oldest ? `${oldest.vendor} · ${fmtShort(oldest.amount)} · ${t('excludes on-hold bills')}` : '' },
       ].map((s, i) => (
         <div key={i} className="stat">
@@ -244,6 +248,8 @@ function StatStrip({ dashboard }: { dashboard: any }) {
         </div>
       ))}
     </div>
+    <p className="as-of-row"><AsOf at={asOf} /> · {t('percentages are of total invoice value')}</p>
+    </section>
   );
 }
 
@@ -268,11 +274,11 @@ function StageRow({ dashboard }: { dashboard: any }) {
             <span className="sname">{t(s.short)}</span>
             {a.count > 0
               ? <>
-                <span className="samt mono">{fmtShort(a.amount)}</span>
+                <span className="samt mono"><Money value={a.amount} /></span>
                 <span className="scount">{a.count} {t(plural(a.count, 'bill'))}{a.onHold ? ` · ${a.onHold} ${t('on hold')}` : ''}</span>
               </>
               : <span className="scount">0 {t('bills')}, ₹0</span>}
-            <div className="stage-bar-track">
+            <div className="stage-bar-track" aria-hidden="true">
               <div className="stage-bar-fill" style={{ width: `${pctW}%`, background: `var(--stage-${i + 1})` }} />
             </div>
           </div>
@@ -282,7 +288,7 @@ function StageRow({ dashboard }: { dashboard: any }) {
   );
 }
 
-function VendorPanel({ bills }: { bills: Bill[] }) {
+function VendorPanel({ bills, asOf }: { bills: Bill[]; asOf: Date | null }) {
   const { t } = useAppSettings();
   const agg = useMemo(() => {
     const map: Record<string, { cleared: number; in_progress: number; on_hold: number; total: number; count: number }> = {};
@@ -325,7 +331,7 @@ function VendorPanel({ bills }: { bills: Bill[] }) {
 
   return (
     <div className="panel">
-      <div className="panel-head"><h2>{t('By DSU / vendor')}</h2><span className="note">{t('₹ value, split by clearance status')}</span></div>
+      <div className="panel-head"><h2>{t('By DSU / vendor')}</h2><span className="note">{t('₹ value, split by clearance status')} · <AsOf at={asOf} /></span></div>
       <div className="legend-inline">
         <span><i style={{ background: 'var(--good)' }} />{t('Cleared')}</span>
         <span><i style={{ background: 'var(--accent)' }} />{t('In progress')}</span>
@@ -334,7 +340,7 @@ function VendorPanel({ bills }: { bills: Bill[] }) {
       {agg.map(([vendor, a]) => (
         <div key={vendor} className="vendor-row">
           <div className="vendor-name" title={vendor}>{vendor} <span className="cnt">({a.count})</span></div>
-            <div className="vbar">
+            <div className="vbar" role="img" aria-label={`${vendor}: ${t('Cleared')} ${fmtShort(a.cleared)}, ${t('In progress')} ${fmtShort(a.in_progress)}, ${t('On hold / exception')} ${fmtShort(a.on_hold)}`}>
               {a.cleared > 0 && (
                 <span
                   className="seg-cleared"
@@ -362,7 +368,7 @@ function VendorPanel({ bills }: { bills: Bill[] }) {
                 />
               )}
             </div>
-          <div className="vendor-amt mono">{fmtShort(a.total)}</div>
+          <div className="vendor-amt mono"><Money value={a.total} /></div>
         </div>
       ))}
       {hoveredSegment && (
@@ -382,7 +388,7 @@ function VendorPanel({ bills }: { bills: Bill[] }) {
   );
 }
 
-function ExceptionPanel({ bills, onEdit, readOnly }: { bills: Bill[]; onEdit: (bill: Bill) => void; readOnly: boolean }) {
+function ExceptionPanel({ bills, onEdit, readOnly, asOf }: { bills: Bill[]; onEdit: (bill: Bill) => void; readOnly: boolean; asOf: Date | null }) {
   const { t } = useAppSettings();
   // On-hold bills first, then any bill with a derived reason (missing data or no recorded status).
   const exceptions = useMemo(() => bills
@@ -393,7 +399,7 @@ function ExceptionPanel({ bills, onEdit, readOnly }: { bills: Bill[]; onEdit: (b
     <div className="panel">
       <div className="panel-head">
         <h2>{t('Needs action')}</h2>
-        <span className="note">{exceptions.length} {t(plural(exceptions.length, 'bill'))} · {heldCount} {t('on hold')}</span>
+        <span className="note">{exceptions.length} {t(plural(exceptions.length, 'bill'))} · {heldCount} {t('on hold')} · <AsOf at={asOf} /></span>
       </div>
       <div className="exception-scroll">
       {exceptions.map(b => (
@@ -412,7 +418,7 @@ function ExceptionPanel({ bills, onEdit, readOnly }: { bills: Bill[]; onEdit: (b
         >
           <div className="exc-top">
             <span>{b.vendor} · <RecordedText value={b.invoice} /></span>
-            <span className="exc-amt mono">{fmtShort(billAmount(b))}</span>
+            <span className="exc-amt mono"><Money value={billAmount(b)} /></span>
           </div>
           <ReasonBadges bill={b} />
           <div className="exc-note">
@@ -432,7 +438,7 @@ function ExceptionPanel({ bills, onEdit, readOnly }: { bills: Bill[]; onEdit: (b
   );
 }
 
-function AgingPanel({ bills, onEdit, readOnly }: { bills: Bill[]; onEdit: (bill: Bill) => void; readOnly: boolean }) {
+function AgingPanel({ bills, onEdit, readOnly, asOf }: { bills: Bill[]; onEdit: (bill: Bill) => void; readOnly: boolean; asOf: Date | null }) {
   const { t } = useAppSettings();
   const aging = useMemo(() => bills
     .filter(b => b.cat !== 'cleared' && b.cat !== 'on_hold' && b._days !== null && b._days !== undefined && b._days >= 0)
@@ -440,7 +446,7 @@ function AgingPanel({ bills, onEdit, readOnly }: { bills: Bill[]; onEdit: (bill:
   , [bills]);
   return (
     <div className="panel">
-      <div className="panel-head"><h2>{t('Pending bills')}</h2><span className="note">{t('days since invoice raised, still uncleared')}</span></div>
+      <div className="panel-head"><h2>{t('Pending bills')}</h2><span className="note">{t('days since invoice raised, still uncleared')} · <AsOf at={asOf} /></span></div>
       <div className="table-scroll pending-bills-scroll">
         <table>
           <thead>
@@ -466,7 +472,7 @@ function AgingPanel({ bills, onEdit, readOnly }: { bills: Bill[]; onEdit: (bill:
                 <td className="vendor-cell">{b.vendor}</td>
                 <td className="inv-cell mono"><RecordedText value={b.invoice} /></td>
                 <td className="num mono">{b._days}</td>
-                <td className="num amt-cell mono">{fmtIN(billAmount(b))}</td>
+                <td className="num amt-cell mono"><Money value={billAmount(b)} /></td>
                 <td><StageChip bill={b} /></td>
                 <td className="status-cell"><RecordedText value={b.status} /> <ReasonBadges bill={b} /></td>
               </tr>
@@ -586,8 +592,8 @@ function Table({ bills, users, emptyMessage, sortBy, sortDir, onSort, onEdit, on
               <td className="bill-register-cell vendor-cell">{b.vendor}</td>
               <td className="bill-register-cell inv-cell mono"><RecordedText value={b.invoice} /></td>
               <td className="bill-register-cell mono">{b.efileNumber || '—'}</td>
-              <td className="bill-register-cell mono">{b.date ? formatDate(b.date) : '—'}</td>
-              <td className="bill-register-cell num amt-cell mono">{fmtIN(billAmount(b))}</td>
+              <td className="bill-register-cell mono">{formatDate(b.date)}</td>
+              <td className="bill-register-cell num amt-cell mono"><Money value={billAmount(b)} /></td>
               <td className="bill-register-cell bill-stage-cell">
                 <StageChip bill={b} />
                 <ReasonBadges bill={b} />
@@ -747,7 +753,7 @@ function BillHistoryModal({
             </div>
             <div className="history-summary-item">
               <span className="history-summary-label">{t('Amount')}</span>
-              <strong className="mono">{fmtIN(billAmount(bill))}</strong>
+              <strong className="mono"><Money value={billAmount(bill)} exact /></strong>
             </div>
             <div className="history-current-stage">
               <span className="history-summary-label">{t('Current stage')}</span>
@@ -1062,28 +1068,6 @@ function BillModal({ bill, onSave, onClose }: { bill: Bill | null; onSave: (data
       </form>
     </div>
   );
-}
-
-// function formatDate(d: string): string {
-//   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-//   const p = d.split('-');
-//   if (p.length < 3) return d;
-//   return `${p[2]} ${months[parseInt(p[1]) - 1]} ${p[0]}`;
-// }
-function formatDate(d: string): string {
-  const p = d.split('-');
-  if (p.length < 3) return d;
-
-  const yy = p[0].slice(-2);
-  const mm = p[1].padStart(2, '0');
-  const dd = p[2].padStart(2, '0');
-
-  return `${dd}/${mm}/${yy}`;
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 function billAmount(bill: Bill): number {

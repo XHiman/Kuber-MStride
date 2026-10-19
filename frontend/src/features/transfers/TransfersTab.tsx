@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../../lib/api';
 import { FISCAL_YEARS, type Transfer, type District, type UserProfile } from '../../types';
-import { fmtIN, fmtShort } from '../bills/utils';
+import { fmtIN, formatDate } from '../../lib/format';
+import { AsOf, Money } from '../../components/Money';
 import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
 import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
@@ -62,6 +63,7 @@ export default function TransfersTab({ globalQuery = '', readOnly = false }: { g
     remarks: '',
   });
 
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   useEffect(() => { load(); }, []);
 
   async function load(): Promise<Transfer[]> {
@@ -77,6 +79,7 @@ export default function TransfersTab({ globalQuery = '', readOnly = false }: { g
     setDistrictStats(dStats);
     setDistricts(dRecords);
     setUsers(people);
+    setLoadedAt(new Date());
     return records;
   }
 
@@ -316,9 +319,9 @@ async function handleTransferSave() {
       {transferStats && (
         <div className="stats n4">
           {[
-            { lbl: 'Total transferred', val: fmtShort(transferStats.totalAmt), sub: `${transferStats.count} ${t('releases')}` },
-            { lbl: 'Utilized to date', val: fmtShort(transferStats.totalUtil), sub: `${transferStats.utilizationPct}% ${t('of transferred')}` },
-            { lbl: 'Unutilized balance', val: fmtShort(transferStats.unutilized), sub: 'awaiting UC' },
+            { lbl: 'Total transferred', val: <Money value={transferStats.totalAmt} />, sub: `${transferStats.count} ${t('releases')}` },
+            { lbl: 'Utilized to date', val: <Money value={transferStats.totalUtil} />, sub: `${transferStats.utilizationPct}% ${t('of transferred')}` },
+            { lbl: 'Unutilized balance', val: <Money value={transferStats.unutilized} />, sub: 'awaiting UC' },
             { lbl: 'Awaiting minutes', val: transferStats.pending, sub: transferStats.pending ? 'not yet released' : 'all released' },
           ].map((s, i) => (
             <div key={i} className="stat">
@@ -329,6 +332,7 @@ async function handleTransferSave() {
           ))}
         </div>
       )}
+      {transferStats && <p className="as-of-row"><AsOf at={loadedAt} /></p>}
 
       <div className="panel">
         <div className="panel-head">
@@ -354,7 +358,7 @@ async function handleTransferSave() {
           <div className="stats n3 district-transfer-stats">
             {[
               { lbl: 'Districts', val: districtStats.totalDistricts, sub: 'across 6 divisions' },
-              { lbl: 'Total released', val: fmtShort(districtStats.totalReleased), sub: `${districtStats.releasedCount} ${t(districtStats.releasedCount === 1 ? 'district' : 'districts')} ${t('recorded')}` },
+              { lbl: 'Total released', val: <Money value={districtStats.totalReleased} />, sub: `${districtStats.releasedCount} ${t(districtStats.releasedCount === 1 ? 'district' : 'districts')} ${t('recorded')}` },
               { lbl: 'Awaiting release', val: districtStats.awaitingRelease, sub: 'no amount entered yet' },
             ].map((stat, index) => (
               <div key={index} className="stat">
@@ -365,6 +369,7 @@ async function handleTransferSave() {
             ))}
           </div>
         )}
+        {districtStats && <p className="as-of-row"><AsOf at={loadedAt} /></p>}
       <div className="panel district-transfer-panel">
         <div className="panel-head">
           <div>
@@ -759,7 +764,7 @@ function TransferRecordsSection({
                         <path d="m6 8 4 4 4-4" />
                       </svg></span>
                         <span className="recipient-group-name">{recipient}</span>
-                        <span className="note">· {recipientTransfers.length} {t(recipientTransfers.length === 1 ? 'transfer' : 'transfers')} · {fmtIN(recipientTransfers.reduce((sum, transfer) => sum + transfer.amount, 0))} {t('total')}</span>
+                        <span className="note">· {recipientTransfers.length} {t(recipientTransfers.length === 1 ? 'transfer' : 'transfers')} · <Money value={recipientTransfers.reduce((sum, transfer) => sum + transfer.amount, 0)} /> {t('total')}</span>
                       </button>
                     </td>
                   </tr>
@@ -770,17 +775,17 @@ function TransferRecordsSection({
                         {transfer.purpose}
                         <br /><span className="mono" style={{ color: 'var(--text-muted)' }}>{transfer.objectCode} · {transfer.fiscalYear} · {transfer.budgetCode || t('Unassigned')}</span>
                       </td>
-                      <td className="num amt-cell mono">{fmtIN(transfer.amount)}</td>
-                      <td className="mono">{transfer.orderDate ? formatDate(transfer.orderDate) : '—'}</td>
+                      <td className="num amt-cell mono"><Money value={transfer.amount} /></td>
+                      <td className="mono">{formatDate(transfer.orderDate)}</td>
                       <td><span className={`chip ${transfer.status}`}><span className="dot" />{t(transfer.status === 'transferred' ? 'Transferred' : 'Minutes awaited')}</span></td>
                       <td className="num">
-                        {readOnly ? fmtIN(transfer.utilized) : (
+                        {readOnly ? <Money value={transfer.utilized} /> : (
                           <button className="btn utilization-manage-button" type="button" onClick={() => onManageUtilization(transfer)}>
-                            {fmtIN(transfer.utilized)} · {transfer.utilizations.length} {t('entries')}
+                            <Money value={transfer.utilized} /> · {transfer.utilizations.length} {t('entries')}
                           </button>
                         )}
                       </td>
-                      <td className="num mono">{fmtIN(transfer.amount - transfer.utilized)}</td>
+                      <td className="num mono"><Money value={transfer.amount - transfer.utilized} /></td>
                       <td className="status-cell">{transfer.remarks || '—'}</td>
                       {!readOnly && <td className="row-actions"><button className="btn-icon" onClick={() => onEdit(transfer)} title={t('Edit')}>✎</button></td>}
                     </tr>
@@ -796,13 +801,6 @@ function TransferRecordsSection({
       </p>
     </section>
   );
-}
-
-function formatDate(d: string): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const p = d.split('-');
-  if (p.length < 3) return d;
-  return `${p[2]} ${months[parseInt(p[1]) - 1]} ${p[0]}`;
 }
 
 function localToday(): string {
