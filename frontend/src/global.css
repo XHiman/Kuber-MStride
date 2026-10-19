@@ -5080,3 +5080,26 @@ footer {
 .vendor-table .raw-names {
   white-space: normal;
 }
+
+/* ── Your assigned work & scope (Step 7) ── */
+.work-identity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 0 0 14px;
+}
+.work-identity dt {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.work-identity dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.show-all {
+  margin-top: 10px;
+}

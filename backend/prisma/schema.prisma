@@ -129,6 +129,8 @@ model User {
   name         String
   programs     String   @default("[]")
   districts    String   @default("[]")
+  /// TODO(roles): placeholder — 'finance' (all bills) or 'dsu' (own DSU only). Not an access control.
+  role         String   @default("finance")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   bills        Bill[]

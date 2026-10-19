@@ -24,7 +24,7 @@ const IMPORT_FIELDS: Record<ImportEntity, string[]> = {
   objectHeads: ['code', 'name', 'nameMr'],
   transfers: ['recipient', 'scopeType', 'districtFund', 'purpose', 'objectCode', 'amount', 'fiscalYear', 'budgetCode', 'orderDate', 'status', 'utilized', 'utilizationDate', 'remarks'],
   districts: ['district', 'division', 'amount', 'releaseDate', 'remarks', 'source'],
-  users: ['username', 'password', 'name', 'programs', 'districts'],
+  users: ['username', 'password', 'name', 'programs', 'districts', 'role'],
 };
 const NUMERIC_FIELDS: Partial<Record<ImportEntity, string[]>> = {
   bills: ['sr', 'amount', 'amountSanctioned', 'days'],
@@ -187,7 +187,7 @@ function blankRecord(entity: AdminEntity): RecordRow {
     case 'districts':
       return { district: '', division: '', amount: 0, releaseDate: null, remarks: null, source: 'admin' };
     case 'users':
-      return { username: '', password: '', name: '', programs: [], districts: [] };
+      return { username: '', password: '', name: '', programs: [], districts: [], role: 'finance' };
   }
 }
 
@@ -762,7 +762,7 @@ export default function AdminApp() {
               <p className="admin-muted">Edit this record as JSON. Protected fields such as database IDs are managed by the server.</p>
               {entity === 'users' && (
                 <p className="admin-muted">
-                  User accounts require a unique username and an initial password of at least 10 characters. To reset a password, add a "password" field; leave it out to keep the existing password. Password hashes are never shown here.
+                  User accounts require a unique username and an initial password of at least 10 characters. To reset a password, add a "password" field; leave it out to keep the existing password. Password hashes are never shown here. "role" is "finance" (sees all bills on their dashboard) or "dsu" (sees only their DSU district(s) listed in "districts"); it is a placeholder and does not restrict API access.
                 </p>
               )}
               <textarea className="admin-json-editor" spellCheck={false} value={editor} onChange={event => setEditor(event.target.value)} />

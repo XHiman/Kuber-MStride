@@ -104,9 +104,13 @@ export interface TransferHistoryEntry {
   newValue: string | null;
 }
 
+export type UserRole = 'finance' | 'dsu';
+
 export interface UserProfile {
   id: string;
   name: string;
+  /** TODO(roles): placeholder; older API versions omit it (treated as finance). */
+  role?: UserRole;
   programs: string[];
   districts: string[];
   assignedBillCount?: number;

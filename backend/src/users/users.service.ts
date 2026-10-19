@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeStageBucket } from '../common/bill-utils';
+import { normalizeRole } from './user-role';
 
 @Injectable()
 export class UsersService {
@@ -72,10 +73,11 @@ export class UsersService {
     };
   }
 
-  toProfile(user: { id: string; name: string; programs: string; districts: string }) {
+  toProfile(user: { id: string; name: string; programs: string; districts: string; role?: string | null }) {
     return {
       id: user.id,
       name: user.name,
+      role: normalizeRole(user.role),
       programs: this.parseList(user.programs),
       districts: this.parseList(user.districts),
     };

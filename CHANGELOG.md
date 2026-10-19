@@ -2,6 +2,12 @@
 
 One entry per step of the UX / trust improvement plan.
 
+## Step 7 — Dashboard and "Your assigned work"
+- **Placeholder role** (TODO): `users.role` is `finance` (default) or `dsu`. It comes with migration `20261019120000_user_role_placeholder`, is included in the user profile, can be set from the admin JSON editor (validated, with an explanation in the editor) and is carried through backups (older backups restore as `finance`). It is **not access control**: bills stay publicly readable, as decided in PLAN.md A3. ⚠ `npm run start:prod` runs `prisma migrate deploy`, so the column is added on the next production deploy. The frontend treats a missing role as `finance`, so it works before and after.
+- Scope rules (`lib/scope.ts`, tested): finance sees every bill. A DSU user sees bills for their DSU district(s), matched through the vendor map or the bill's district, plus any bill assigned to them. For example, a Nagpur DSU user sees the 16 merged Nagpur bills.
+- The Dashboard tab is rebuilt as **Your assigned work & scope**. It shows name, role and scope ("All bills (finance)" / "DSU: Pune"); KPIs for **open items** (count, value, on hold), the **oldest open item** (days, vendor, amount), **assigned to you** and bills in scope; then the open items oldest first with Overdue flags, stage chips and reasons (first 10, then "Show all"), followed by district records.
+- Verified with component tests only. The signed-in view could not be opened in a browser without a production login.
+
 ## Step 6 — Vendor and DSU breakdown
 - One mapping file, `frontend/src/lib/vendors.ts`, normalises vendor names for display and grouping. Approved merges: "Nagpur - E & Y" + "DSU Nagpur- E & Y" → **DSU Nagpur – E&Y** (16 bills); "Nashik KPMG" + "DSU Nashik KPMG" (+ seed "DSU Nashik-KPMG") → **DSU Nashik – KPMG** (10); "DSU CSN- Choice" (+ local "CSN - Choice") → **DSU Chh. Sambhajinagar – Choice** (7). Matching ignores case, spacing and punctuation. The ambiguous names (E & Y LLP…, the Tata lines, PMC - KPMG Advisory Ser) are deliberately kept separate. "DSU Amra Linpico" is shown as **DSU Amravati – Linpico** (marked TODO: confirm).
 - Stored vendor values are unchanged. Tests show the overall total and count are identical before and after grouping; only per-vendor groupings merge (23 raw names → 21 vendors). The backend `/bills/dashboard` vendor breakdown still uses raw names and is untouched.

@@ -17,7 +17,7 @@ export const VENDOR_MAP: VendorEntry[] = [
   { name: 'DSU Nashik – KPMG', dsu: 'Nashik', aliases: ['DSU Nashik KPMG', 'DSU Nashik-KPMG', 'Nashik KPMG'] },
   { name: 'DSU Chh. Sambhajinagar – Choice', dsu: 'Chh. Sambhajinagar', aliases: ['DSU CSN- Choice', 'CSN - Choice'] },
   { name: 'DSU Pune – STC', dsu: 'Pune', aliases: ['DSU Pune - STC'] },
-  // TODO(confirm): "Amra" read as Amravati.
+  // "Amra" = Amravati (confirmed 19 Oct 2026).
   { name: 'DSU Amravati – Linpico', dsu: 'Amravati', aliases: ['DSU Amra Linpico'] },
 ];
 

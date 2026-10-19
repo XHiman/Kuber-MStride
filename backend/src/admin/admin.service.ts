@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BillsService } from '../bills/bills.service';
 import { TransfersService, type DistrictFund, type TransferInput } from '../transfers/transfers.service';
 import { UserAuthService } from '../users/user-auth.service';
+import { USER_ROLES, type UserRole } from '../users/user-role';
 
 export type AdminEntity =
   | 'bills'
@@ -125,7 +126,7 @@ export class AdminService {
       budgetHeads: this.backupRows(tables, 'budgetHeads', ['code', 'name', 'description']),
       objectHeads: this.backupRows(tables, 'objectHeads', ['code', 'name', 'nameMr']),
       users: this.backupRows(tables, 'users', [
-        'id', 'username', 'passwordHash', 'name', 'programs', 'districts', 'createdAt', 'updatedAt',
+        'id', 'username', 'passwordHash', 'name', 'programs', 'districts', 'role', 'createdAt', 'updatedAt',
       ], ['createdAt', 'updatedAt']),
       budgets: this.backupRows(tables, 'budgets', [
         'id', 'code', 'fiscalYear', 'name', 'nameMr',
@@ -236,6 +237,7 @@ export class AdminService {
             name: true,
             programs: true,
             districts: true,
+            role: true,
             createdAt: true,
             updatedAt: true,
           },
@@ -355,7 +357,7 @@ export class AdminService {
         });
       }
       case 'users': {
-        const value = this.pick(input, ['username', 'password', 'name', 'programs', 'districts']);
+        const value = this.pick(input, ['username', 'password', 'name', 'programs', 'districts', 'role']);
         const username = this.requireUsername(value);
         await this.ensureUsernameAvailable(username);
         const passwordHash = await this.userAuth.hashPassword(this.requireString(value, 'password'));
@@ -366,9 +368,10 @@ export class AdminService {
             name: this.requireString(value, 'name'),
             programs: JSON.stringify(this.stringList(value.programs)),
             districts: JSON.stringify(this.stringList(value.districts)),
+            role: this.hasOwn(value, 'role') ? this.requireRole(value.role) : 'finance',
           },
           select: {
-            id: true, username: true, name: true, programs: true, districts: true, createdAt: true, updatedAt: true,
+            id: true, username: true, name: true, programs: true, districts: true, role: true, createdAt: true, updatedAt: true,
           },
         });
       }
@@ -441,7 +444,7 @@ export class AdminService {
         });
       }
       case 'users': {
-        const value = this.pick(input, ['username', 'password', 'name', 'programs', 'districts']);
+        const value = this.pick(input, ['username', 'password', 'name', 'programs', 'districts', 'role']);
         this.validateOptionalStringFields(value, ['username', 'password', 'name']);
         if (this.hasOwn(value, 'name') && value.name === null) {
           throw new BadRequestException('name must be a non-empty string.');
@@ -459,9 +462,10 @@ export class AdminService {
             ...(this.hasOwn(value, 'name') && { name: this.requireString(value, 'name') }),
             ...(this.hasOwn(value, 'programs') && { programs: JSON.stringify(this.stringList(value.programs)) }),
             ...(this.hasOwn(value, 'districts') && { districts: JSON.stringify(this.stringList(value.districts)) }),
+            ...(this.hasOwn(value, 'role') && { role: this.requireRole(value.role) }),
           },
           select: {
-            id: true, username: true, name: true, programs: true, districts: true, createdAt: true, updatedAt: true,
+            id: true, username: true, name: true, programs: true, districts: true, role: true, createdAt: true, updatedAt: true,
           },
         });
       }
@@ -653,6 +657,13 @@ export class AdminService {
       });
     }
     return rows;
+  }
+
+  private requireRole(value: unknown): UserRole {
+    if (typeof value !== 'string' || !USER_ROLES.includes(value as UserRole)) {
+      throw new BadRequestException(`role must be one of: ${USER_ROLES.join(', ')}.`);
+    }
+    return value as UserRole;
   }
 
   private backupRows(
