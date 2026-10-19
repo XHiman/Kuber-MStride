@@ -8,8 +8,8 @@ import { useAppSettings } from '../../lib/appSettings';
 import ExportActions from '../../components/ExportActions';
 import ProgramDistrictField, { type ProgramDistrictType } from '../../components/ProgramDistrictField';
 import { createPortal } from 'react-dom';
-import { GlossaryButton, ReasonBadges, RecordedText, StageTerm } from '../../components/StatusGlossary';
-import { REASONS, STAGE_GLOSSARY, deriveReasons, plural } from '../../lib/status';
+import { GlossaryButton, ReasonBadges, RecordedText, StageIcon, StageTerm } from '../../components/StatusGlossary';
+import { REASONS, STAGE_GLOSSARY, STAGE_SLUGS, deriveReasons, movesInMonth, plural, stageFromSlug } from '../../lib/status';
 import { DEFAULT_OVERDUE_DAYS, isOverdue, parseThreshold } from '../../lib/aging';
 import AgingPanel from './AgingPanel';
 import NeedsActionPanel from './NeedsActionPanel';
@@ -23,7 +23,10 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [search, setSearch] = useState('');
   const [vendorFilter, setVendorFilter] = useState('');
-  const [stageFilter, setStageFilter] = useState('');
+  // ?stage=tfc deep-links the register to one stage; kept in sync below.
+  const [stageFilter, setStageFilter] = useState(() => stageFromSlug(new URLSearchParams(window.location.search).get('stage')));
+  const registerRef = useRef<HTMLHeadingElement>(null);
+  const [monthMoves, setMonthMoves] = useState(0);
   const [catFilter, setCatFilter] = useState<BillCategory | ''>('');
   // Oldest first by default, so the longest-waiting bills are seen first.
   const [sortBy, setSortBy] = useState<BillSortKey>('date');
@@ -36,9 +39,24 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
 
   useEffect(() => { load(); }, []);
 
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (stageFilter) url.searchParams.set('stage', STAGE_SLUGS[stageFilter]);
+    else url.searchParams.delete('stage');
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url);
+  }, [stageFilter]);
+
+  function showStage(stage: string) {
+    setStageFilter(stage);
+    if (!stage) return;
+    registerRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    registerRef.current?.focus({ preventScroll: true });
+  }
+
   async function load() {
     const [billsData, dash, people] = await Promise.all([apiClient.bills.list(), apiClient.bills.dashboard(), apiClient.users.list()]);
     setBills(billsData);
+    setMonthMoves(Object.values(movesInMonth(billsData)).reduce((sum, n) => sum + n, 0));
     setDashboard(dash);
     setLoadedAt(new Date());
     setUsers(people);
@@ -164,9 +182,13 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
       <div className="panel">
         <div className="panel-head">
           <h2>{t('Bills by pipeline stage')}</h2>
-          <span className="note">{t('value currently sitting at each checkpoint (not cumulative)')} · <AsOf at={loadedAt} /></span>
+          <span className="note">
+            {t('value currently at each stage, not cumulative')} · {monthMoves
+              ? `${monthMoves} ${t(plural(monthMoves, 'bill'))} ${t('moved stage this month')}`
+              : t('no stage moves recorded this month')} · <AsOf at={loadedAt} />
+          </span>
         </div>
-        <StageRow dashboard={dashboard} />
+        <StageRow dashboard={dashboard} bills={bills} activeStage={stageFilter} onSelect={showStage} />
       </div>
 
       {/* Vendor + Exceptions */}
@@ -197,7 +219,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false }: { globa
       {/* Full register */}
       <div className="panel">
         <div className="panel-head">
-          <h2>{t('Full bill register')}</h2>
+          <h2 id='bill-register' ref={registerRef} tabIndex={-1}>{t('Full bill register')}{stageFilter && <span className='register-scope'> · {t(STAGE_GLOSSARY.find(entry => entry.stage === stageFilter)?.label ?? stageFilter)}</span>}</h2>
           <div className="panel-actions">
             <span className="note">{filtered.length} {t('of')} {bills.length} {t('bills')}</span>
             <ExportActions getRows={getExportRows} filename="bills" />
@@ -293,38 +315,52 @@ function StatStrip({ dashboard, asOf }: { dashboard: any; asOf: Date | null }) {
   );
 }
 
-function StageRow({ dashboard }: { dashboard: any }) {
+function StageRow({ dashboard, bills, activeStage, onSelect }: { dashboard: any; bills: Bill[]; activeStage: string; onSelect: (stage: string) => void }) {
   const { t } = useAppSettings();
-  const stages = STAGE_GLOSSARY.map(entry => ({ key: entry.stage, short: entry.label }));
-
   const sgs = dashboard?.stages ?? {};
-  const maxAmt = Math.max(...stages.map(s => sgs[s.key]?.amount || 0), 1);
+  const maxAmt = Math.max(...STAGE_GLOSSARY.map(s => sgs[s.stage]?.amount || 0), 1);
+  const moves = useMemo(() => movesInMonth(bills), [bills]);
 
   return (
-    <div className="stage-row">
-      {stages.map((s, i) => {
-        const a = sgs[s.key] ?? { amount: 0, count: 0, onHold: 0 };
+    <ol className="stage-row stage-flow">
+      {STAGE_GLOSSARY.map((s, i) => {
+        const a = sgs[s.stage] ?? { amount: 0, count: 0, onHold: 0 };
         const pctW = Math.max(a.amount ? 4 : 0, Math.round(a.amount / maxAmt * 100));
+        const active = activeStage === s.stage;
+        const moved = moves[s.stage] ?? 0;
         return (
-          <div key={i} className={`stage-card${a.count ? '' : ' is-empty'}`}>
-            <span className="stop-row">
-              <span className="snum">{t('STAGE')} {i + 1}</span>
+          <li key={s.stage} className="stage-step">
+            <a
+              href={`?stage=${STAGE_SLUGS[s.stage]}`}
+              className={`stage-card${a.count ? '' : ' is-empty'}${active ? ' is-active' : ''}`}
+              aria-current={active ? 'true' : undefined}
+              onClick={event => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                event.preventDefault();
+                onSelect(active ? '' : s.stage);
+              }}
+            >
+              <span className="stop-row">
+                <span className="snum" style={{ color: `var(--stage-${i + 1}-text)` }}><StageIcon stage={s.stage} /> {t('STAGE')} {i + 1}</span>
                 {a.onHold > 0 && <span className="flag"><span aria-hidden="true">⚠ </span>{t('needs attention')}</span>}
-            </span>
-            <span className="sname">{t(s.short)}</span>
-            {a.count > 0
-              ? <>
-                <span className="samt mono"><Money value={a.amount} /></span>
-                <span className="scount">{a.count} {t(plural(a.count, 'bill'))}{a.onHold ? ` · ${a.onHold} ${t('on hold')}` : ''}</span>
-              </>
-              : <span className="scount">0 {t('bills')}, ₹0</span>}
-            <div className="stage-bar-track" aria-hidden="true">
-              <div className="stage-bar-fill" style={{ width: `${pctW}%`, background: `var(--stage-${i + 1})` }} />
-            </div>
-          </div>
+              </span>
+              <span className="sname">{t(s.label)}</span>
+              {a.count > 0
+                ? <>
+                  <span className="samt mono"><Money value={a.amount} /></span>
+                  <span className="scount">{a.count} {t(plural(a.count, 'bill'))} {t('currently here')}{a.onHold ? ` · ${a.onHold} ${t('on hold')}` : ''}</span>
+                </>
+                : <span className="scount">0 {t('bills')}, ₹0</span>}
+              {moved > 0 && <span className="smoved">↗ {moved} {t('moved in this month')}</span>}
+              <div className="stage-bar-track" aria-hidden="true">
+                <div className="stage-bar-fill" style={{ width: `${pctW}%`, background: `var(--stage-${i + 1})` }} />
+              </div>
+              <span className="stage-card-cta">{t(active ? 'Showing in register · clear' : 'Show in register')} <span aria-hidden="true">→</span></span>
+            </a>
+          </li>
         );
       })}
-    </div>
+    </ol>
   );
 }
 

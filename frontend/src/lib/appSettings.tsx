@@ -14,6 +14,14 @@ const translations: Record<string, string> = {
   'Financial workspaces': 'आर्थिक कार्यक्षेत्रे',
   // Step 1 — status language. TODO: review Marathi wording with a native speaker.
   'What do these mean?': 'याचा अर्थ काय?',
+  // Step 4 — pipeline cards. TODO: review Marathi wording.
+  'currently here': 'सध्या येथे',
+  'moved in this month': 'या महिन्यात येथे आली',
+  'Show in register': 'नोंदवहीत दाखवा',
+  'Showing in register · clear': 'नोंदवहीत दाखवत आहे · काढा',
+  'value currently at each stage, not cumulative': 'प्रत्येक टप्प्यावर सध्याचे मूल्य, एकत्रित नाही',
+  'moved stage this month': 'यांचा टप्पा या महिन्यात बदलला',
+  'no stage moves recorded this month': 'या महिन्यात टप्पा बदल नोंदवलेला नाही',
   // Step 3 — overdue and aging. TODO: review Marathi wording.
   'Aging of open bills': 'खुल्या बिलांचे वय',
   'days since invoice date, all uncleared bills incl. on hold': 'बीजक दिनांकापासूनचे दिवस, रोखलेल्यांसह सर्व अमंजूर बिले',

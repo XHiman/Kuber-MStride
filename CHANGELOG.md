@@ -2,6 +2,15 @@
 
 One entry per step of the UX / trust improvement plan.
 
+## Step 4 — Pipeline stage cards
+- Each stage card is a link (`?stage=invoice|pmc|tfc|file|treasury|cleared`). Clicking one filters the bill register to that stage, scrolls to it and moves focus to the register heading, which names the active stage. Clicking the active card clears the filter. Ctrl/⌘-click opens the filtered view in a new tab.
+- The URL stays in sync with the register's stage filter (`replaceState`), so `?stage=tfc` deep-links and survives a refresh.
+- Each card says "N bills **currently here**", and the panel says "value currently at each stage, not cumulative".
+- No colour-only status: each stage has its own line icon, a number and a text label. The "needs attention" flag has ⚠ plus text, and the active card has a border and its own call-to-action text ("Showing in register · clear").
+- Flow arrows: → between cards on wide screens, ↓ when cards stack on phones, hidden in the 2- and 3-column layouts where an arrow would point at the wrong card.
+- "Bills moved this month" counts only real `tracked` stage changes in the current calendar month; creation rows and import snapshots don't count. Production has none yet (all 76 history rows are October imports), so the panel says "no stage moves recorded this month" instead of showing a misleading number.
+- Reduced motion: no hover lift or smooth scroll.
+
 ## Step 3 — Overdue and aging
 - New "Aging of open bills" panel with buckets for 0–30, 31–90, 91–180 and 180+ days, plus **No invoice date**. Each bucket shows its count and value and works as a filter toggle. All uncleared bills are counted, including on-hold ones; undated bills are shown, not dropped. On 19 Oct 2026 the split is 0 / 20 / 19 / 4 / 2, which adds up to the 45 open bills (checked by a test against the snapshot).
 - Overdue threshold setting (default 90 days, remembered per browser, kept between 1 and 3650). Rows over the threshold get a ⏱ **Overdue** flag with text in the register, the aging list and Needs action; 23 bills are overdue at 90 days.

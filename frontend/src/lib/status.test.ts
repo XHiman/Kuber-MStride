@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Bill } from '../types';
-import { deriveReasons, isPlaceholder, placeholderRemainder, plural, stageLabel } from './status';
+import { STAGE_SLUGS, deriveReasons, isPlaceholder, movesInMonth, placeholderRemainder, plural, stageFromSlug, stageLabel } from './status';
 
 const base = {
   invoice: 'INV-1', date: '2026-05-01', efileNumber: null, status: 'Received tax invoice',
@@ -70,5 +70,24 @@ describe.skipIf(!existsSync(snapshot))('production snapshot', () => {
     const counts: Record<string, number> = {};
     for (const bill of flagged) for (const reason of deriveReasons(bill)) counts[reason] = (counts[reason] ?? 0) + 1;
     expect(counts).toEqual({ missing_invoice_no: 8, missing_invoice_date: 6, not_recorded: 5 });
+  });
+});
+
+describe('stage slugs and monthly moves', () => {
+  it('round-trips slugs', () => {
+    expect(stageFromSlug('tfc')).toBe('TFC Committee Approval');
+    expect(STAGE_SLUGS['Sent to Treasury']).toBe('treasury');
+    expect(stageFromSlug('nope')).toBe('');
+  });
+  it('counts only tracked moves in the current month', () => {
+    const h = (stage: string, enteredAt: string, source: string) => ({ id: enteredAt + stage, stage, enteredAt, source });
+    const bills = [{ stageHistory: [
+      h('Invoice Raised', '2026-10-01T10:00:00Z', 'created'),
+      h('PMC Check Pending', '2026-10-05T10:00:00Z', 'tracked'),
+      h('TFC Committee Approval', '2026-10-18T10:00:00Z', 'tracked'),
+      h('TFC Committee Approval', '2026-09-28T10:00:00Z', 'tracked'),
+      h('File Approval Pending', '2026-10-10T10:00:00Z', 'migration_snapshot'),
+    ] }];
+    expect(movesInMonth(bills, new Date(2026, 9, 19))).toEqual({ 'PMC Check Pending': 1, 'TFC Committee Approval': 1 });
   });
 });

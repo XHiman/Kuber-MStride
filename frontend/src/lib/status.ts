@@ -33,6 +33,37 @@ export const STAGE_GLOSSARY: { stage: string; label: string; definition: string 
 ];
 export const ON_HOLD_DEFINITION = 'Paused at its current stage because of an objection or missing information. A hold remark explains why; the bill keeps its stage.';
 
+/** URL slugs for ?stage=…, in pipeline order. */
+export const STAGE_SLUGS: Record<string, string> = {
+  'Invoice Raised': 'invoice',
+  'PMC Check Pending': 'pmc',
+  'TFC Committee Approval': 'tfc',
+  'File Approval Pending': 'file',
+  'Sent to Treasury': 'treasury',
+  'Cleared by Treasury': 'cleared',
+};
+
+export function stageFromSlug(slug: string | null | undefined): string {
+  return Object.entries(STAGE_SLUGS).find(([, value]) => value === slug)?.[0] ?? '';
+}
+
+/**
+ * Stage moves recorded in the given calendar month, keyed by the stage moved into.
+ * Only 'tracked' history entries count: 'created' rows and import snapshots are not real moves.
+ */
+export function movesInMonth(bills: Pick<Bill, 'stageHistory'>[], now = new Date()): Record<string, number> {
+  const moves: Record<string, number> = {};
+  for (const bill of bills) {
+    for (const entry of bill.stageHistory ?? []) {
+      if (entry.source !== 'tracked') continue;
+      const at = new Date(entry.enteredAt);
+      if (at.getFullYear() !== now.getFullYear() || at.getMonth() !== now.getMonth()) continue;
+      moves[entry.stage] = (moves[entry.stage] ?? 0) + 1;
+    }
+  }
+  return moves;
+}
+
 export function stageLabel(stage: string): string {
   return STAGE_GLOSSARY.find(entry => entry.stage === stage)?.label ?? stage;
 }

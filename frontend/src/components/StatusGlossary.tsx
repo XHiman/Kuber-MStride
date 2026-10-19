@@ -101,3 +101,24 @@ export function RecordedText({ value, empty = '—' }: { value: string | null | 
     </>
   );
 }
+
+// Simple line icons, one per stage (stroke uses currentColor).
+const STAGE_ICON_PATHS: Record<string, string[]> = {
+  'Invoice Raised': ['M6 2h9l5 5v15H6z', 'M14 2v6h6', 'M9 13h8', 'M9 17h6'],
+  'PMC Check Pending': ['M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14z', 'M21 21l-5-5', 'M8 11l2 2 4-4'],
+  'TFC Committee Approval': ['M9 7a3 3 0 1 0 0 .01', 'M17 8a2.5 2.5 0 1 0 0 .01', 'M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6', 'M15 14.5c3 0 6 2 6 5.5'],
+  'File Approval Pending': ['M3 6h6l2 2h10v12H3z', 'M12 12v4', 'M12 12h3'],
+  'Sent to Treasury': ['M3 10l9-6 9 6', 'M5 10v8', 'M10 10v8', 'M14 10v8', 'M19 10v8', 'M3 20h18'],
+  'Cleared by Treasury': ['M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z', 'M8 12l3 3 5-6'],
+};
+
+export function StageIcon({ stage, size = 16 }: { stage: string; size?: number }) {
+  const paths = STAGE_ICON_PATHS[stage];
+  if (!paths) return null;
+  return (
+    <svg className="stage-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      {paths.map(d => <path key={d} d={d} />)}
+    </svg>
+  );
+}
