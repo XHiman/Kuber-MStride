@@ -14,6 +14,21 @@ const translations: Record<string, string> = {
   'Financial workspaces': 'आर्थिक कार्यक्षेत्रे',
   // Step 1 — status language. TODO: review Marathi wording with a native speaker.
   'What do these mean?': 'याचा अर्थ काय?',
+  // Step 6 — vendor / DSU chart. TODO: review Marathi wording.
+  'By vendor': 'विक्रेत्यानुसार',
+  'By DSU': 'DSU नुसार',
+  'Group bills by': 'बिले यानुसार गटबद्ध करा',
+  'Show as table': 'तक्ता म्हणून दाखवा',
+  'Show as chart': 'आलेख म्हणून दाखवा',
+  'Bill value by vendor': 'विक्रेत्यानुसार बिल मूल्य',
+  'Bill value by DSU': 'DSU नुसार बिल मूल्य',
+  'largest first': 'सर्वात मोठे आधी',
+  'Use “Show as table” for exact figures.': 'अचूक आकड्यांसाठी “तक्ता म्हणून दाखवा” वापरा.',
+  'Includes': 'यांचा समावेश',
+  'vendors': 'विक्रेते',
+  'Recorded as': 'नोंद अशी',
+  'Vendor (as recorded)': 'विक्रेता (नोंदीप्रमाणे)',
+  'Bills': 'बिले',
   // Step 5 — bill register. TODO: review Marathi wording.
   'Bill register': 'बिल नोंदवही',
   'rows': 'ओळी',

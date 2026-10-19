@@ -65,7 +65,7 @@ describe('CSV export', () => {
     expect(lines[1]).toBe('# Exported: 19 Oct 2026, 17:05');
     expect(lines[2]).toBe('# Filters: View = Overdue; Stage = TFC approval; Search = "nagpur"');
     expect(lines[3]).toBe('# Rows: 1');
-    expect(lines[4].startsWith('Vendor,Invoice')).toBe(true);
+    expect(lines[4].startsWith('Vendor,Vendor (as recorded),Invoice')).toBe(true);
     expect(lines).toHaveLength(6);
   });
   it('says when no filters apply', () => {

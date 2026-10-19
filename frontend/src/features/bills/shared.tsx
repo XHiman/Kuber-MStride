@@ -2,6 +2,7 @@
 import { useAppSettings } from '../../lib/appSettings';
 import { STAGE_GLOSSARY, isPlaceholder, plural, stageLabel } from '../../lib/status';
 import { STAGES, type Bill } from '../../types';
+import { normaliseVendor } from '../../lib/vendors';
 
 export function billAmount(bill: Bill): number {
   return bill.effectiveAmount
@@ -31,7 +32,8 @@ export function StageChip({ bill }: { bill: Bill }) {
 
 /** Human reference for a bill in accessible names, tolerant of a missing invoice number. */
 export function billRef(bill: Bill): string {
-  return isPlaceholder(bill.invoice) || !bill.invoice?.trim() ? bill.vendor : `${bill.vendor} ${bill.invoice}`;
+  const vendor = normaliseVendor(bill.vendor).name;
+  return isPlaceholder(bill.invoice) || !bill.invoice?.trim() ? vendor : `${vendor} ${bill.invoice}`;
 }
 
 /** "377 days" / "No invoice date". */
@@ -58,4 +60,12 @@ export function EmptyState({ title, detail }: { title: string; detail: string })
       <span><strong>{title}</strong><small>{detail}</small></span>
     </div>
   );
+}
+
+/** Normalised vendor name; the raw spelling stays available in the tooltip when it differs. */
+export function VendorName({ vendor }: { vendor: string }) {
+  const { t } = useAppSettings();
+  const name = normaliseVendor(vendor).name;
+  if (name === vendor) return <>{vendor}</>;
+  return <span className="vendor-normalised" title={`${t('Recorded as')}: ${vendor}`}>{name}</span>;
 }

@@ -2,6 +2,14 @@
 
 One entry per step of the UX / trust improvement plan.
 
+## Step 6 — Vendor and DSU breakdown
+- One mapping file, `frontend/src/lib/vendors.ts`, normalises vendor names for display and grouping. Approved merges: "Nagpur - E & Y" + "DSU Nagpur- E & Y" → **DSU Nagpur – E&Y** (16 bills); "Nashik KPMG" + "DSU Nashik KPMG" (+ seed "DSU Nashik-KPMG") → **DSU Nashik – KPMG** (10); "DSU CSN- Choice" (+ local "CSN - Choice") → **DSU Chh. Sambhajinagar – Choice** (7). Matching ignores case, spacing and punctuation. The ambiguous names (E & Y LLP…, the Tata lines, PMC - KPMG Advisory Ser) are deliberately kept separate. "DSU Amra Linpico" is shown as **DSU Amravati – Linpico** (marked TODO: confirm).
+- Stored vendor values are unchanged. Tests show the overall total and count are identical before and after grouping; only per-vendor groupings merge (23 raw names → 21 vendors). The backend `/bills/dashboard` vendor breakdown still uses raw names and is untouched.
+- Normalised names appear in the register (with sort, filter and search), Needs action, aging and the drawer. The raw spelling is in a "Recorded as" tooltip, the drawer's "Vendor (as recorded)" field and a separate CSV column.
+- The per-vendor 100 % bars (which could not be compared with each other) are replaced by a **sorted horizontal stacked bar chart** with a shared axis from ₹0 to a rounded maximum and recessive gridlines. Each name sits on its own line, so it never truncates, and each row shows its value and bill count. There is a legend, a 2 px gap between segments, rounded ends, per-segment hover tooltips, and a screen-reader sentence per row with every segment value.
+- Toggle **By vendor / By DSU**: five DSUs plus "Other / non-DSU". **Show as table** gives an accessible data table with exact columns for cleared, in progress and on hold.
+- Chart colours have their own `--chart-*` tokens. They passed the dataviz palette validator in light (#087f23 / #246fc4 / #b42318 on #fff) and dark (#2ea44f / #4a94e8 / #e0524c on #171716): lightness band, chroma, CVD separation ΔE ≥ 22, normal-vision floor, and 3:1 contrast. The dark-mode green and red were re-stepped because the UI's status tokens were too light for chart marks.
+
 ## Step 5 — Bill register
 - The register is now its own component (`features/bills/Register.tsx`), with pure, tested logic in `registerLogic.ts`.
 - Table semantics: a visible `<caption>` ("Showing 1–25 of 76 bills · sorted by Invoice date, ascending"), `<th scope="col">`, and sortable headers (Vendor, Invoice date, Days open, Amount, Stage) that are real buttons with `aria-sort`. A new **Days open** column has Overdue flags. Missing dates and day counts sort last in both directions.

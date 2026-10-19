@@ -21,7 +21,7 @@ describe('NeedsActionPanel', () => {
   it('shows bill, days open, stage, owner and next action', () => {
     render(<NeedsActionPanel bills={[bill({})]} users={users} asOf={null} threshold={90} readOnly onEdit={vi.fn()} onAssign={vi.fn()} onResolveHold={vi.fn()} />);
     const card = screen.getByRole('listitem');
-    expect(within(card).getByText(/DSU CSN- Choice/)).toBeTruthy();
+    expect(within(card).getByTitle('Recorded as: DSU CSN- Choice').textContent).toBe('DSU Chh. Sambhajinagar – Choice');
     expect(within(card).getByText('377 days')).toBeTruthy();
     expect(within(card).getByText('Overdue')).toBeTruthy();
     expect(within(card).getByText('File approval pending')).toBeTruthy();

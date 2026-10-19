@@ -5,7 +5,7 @@ import { AGING_BUCKETS, agingBucket, isOpen, isOverdue, parseThreshold, summaris
 import { useAppSettings } from '../../lib/appSettings';
 import { plural } from '../../lib/status';
 import type { Bill } from '../../types';
-import { DaysOpen, EmptyState, OverdueFlag, StageChip, billAmount, billRef } from './shared';
+import { DaysOpen, EmptyState, OverdueFlag, StageChip, VendorName, billAmount, billRef } from './shared';
 
 type Props = {
   bills: Bill[];
@@ -89,7 +89,7 @@ export default function AgingPanel({ bills, asOf, threshold, onThresholdChange, 
             {rows.map(b => (
               <tr key={b.id}>
                 <td className="vendor-cell">
-                  {readOnly ? b.vendor : <button type="button" className="link-btn" onClick={() => onOpen(b)} aria-label={`${t('Edit')}: ${billRef(b)}`}>{b.vendor}</button>}
+                  {readOnly ? <VendorName vendor={b.vendor} /> : <button type="button" className="link-btn" onClick={() => onOpen(b)} aria-label={`${t('Edit')}: ${billRef(b)}`}><VendorName vendor={b.vendor} /></button>}
                 </td>
                 <td className="inv-cell mono"><RecordedText value={b.invoice} /></td>
                 <td className="num mono">

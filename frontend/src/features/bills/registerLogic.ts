@@ -5,6 +5,7 @@ import { formatDate, formatDateTime } from '../../lib/format';
 import { REASONS, STAGE_GLOSSARY, deriveReasons, stageLabel } from '../../lib/status';
 import { STAGES, type Bill, type BillCategory, type UserProfile } from '../../types';
 import { billAmount } from './shared';
+import { normaliseVendor } from '../../lib/vendors';
 
 export type SavedViewId = '' | 'mine' | 'overdue' | 'on_hold' | 'cleared_fy';
 export const SAVED_VIEWS: { id: SavedViewId; label: string }[] = [
@@ -55,12 +56,12 @@ export function filterBills(bills: Bill[], f: RegisterFilters, ctx: FilterContex
   const terms = `${f.search} ${ctx.globalQuery}`.toLowerCase().trim().split(/\s+/).filter(Boolean);
   return bills.filter(b => {
     if (!matchesView(b, f.view, ctx)) return false;
-    if (f.vendor && b.vendor !== f.vendor) return false;
+    if (f.vendor && normaliseVendor(b.vendor).name !== f.vendor) return false;
     if (f.stage && b.bucket !== f.stage) return false;
     if (f.cat && b.cat !== f.cat) return false;
     if (!terms.length) return true;
     const assigned = ctx.users.find(user => user.id === b.assignedUserId)?.name || '';
-    const haystack = `${b.vendor} ${b.invoice} ${b.efileNumber || ''} ${b.status} ${b.cat} ${b.bucket} ${stageLabel(b.bucket)} ${b.attribute || ''} ${b.note || ''} ${b.holdReason || ''} ${b.budgetCode || ''} ${b.objectHead || ''} ${b.program || ''} ${b.district || ''} ${assigned} ${billAmount(b)} ${b.date || ''}`.toLowerCase();
+    const haystack = `${b.vendor} ${normaliseVendor(b.vendor).name} ${b.invoice} ${b.efileNumber || ''} ${b.status} ${b.cat} ${b.bucket} ${stageLabel(b.bucket)} ${b.attribute || ''} ${b.note || ''} ${b.holdReason || ''} ${b.budgetCode || ''} ${b.objectHead || ''} ${b.program || ''} ${b.district || ''} ${assigned} ${billAmount(b)} ${b.date || ''}`.toLowerCase();
     return terms.every(term => haystack.includes(term));
   });
 }
@@ -69,7 +70,7 @@ export function filterBills(bills: Bill[], f: RegisterFilters, ctx: FilterContex
 export function sortBills(bills: Bill[], key: SortKey, dir: SortDir): Bill[] {
   const value = (b: Bill): string | number | null => {
     switch (key) {
-      case 'vendor': return b.vendor.toLowerCase();
+      case 'vendor': return normaliseVendor(b.vendor).name.toLowerCase();
       case 'date': return b.date || null;
       case 'days': return b._days ?? null;
       case 'amount': return billAmount(b);
@@ -109,7 +110,8 @@ export function describeFilters(f: RegisterFilters, globalQuery: string): string
 
 export function exportRows(bills: Bill[], users: UserProfile[]): Record<string, unknown>[] {
   return bills.map(b => ({
-    Vendor: b.vendor,
+    Vendor: normaliseVendor(b.vendor).name,
+    'Vendor (as recorded)': b.vendor,
     Invoice: b.invoice,
     'E-file number': b.efileNumber || '',
     'Invoice date': b.date || '',

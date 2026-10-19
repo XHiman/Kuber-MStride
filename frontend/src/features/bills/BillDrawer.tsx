@@ -7,7 +7,7 @@ import { useAppSettings } from '../../lib/appSettings';
 import { formatDate, formatDateTime } from '../../lib/format';
 import { stageLabel } from '../../lib/status';
 import { STAGES, type Bill, type UserProfile } from '../../types';
-import { DaysOpen, OverdueFlag, StageChip, billAmount } from './shared';
+import { DaysOpen, OverdueFlag, StageChip, VendorName, billAmount } from './shared';
 
 type Props = {
   bill: Bill;
@@ -59,6 +59,7 @@ export default function BillDrawer({ bill, users, overdueDays, readOnly, onClose
   const isLastStage = STAGES.indexOf(bill.bucket) === STAGES.length - 1;
 
   const facts: [string, React.ReactNode][] = [
+    ['Vendor (as recorded)', bill.vendor],
     ['Invoice no.', <RecordedText value={bill.invoice} />],
     ['E-file no.', bill.efileNumber || <span className="not-recorded">{t('Not recorded')}</span>],
     ['Invoice date', bill.date ? formatDate(bill.date) : <span className="not-recorded">{t('Not recorded')}</span>],
@@ -77,7 +78,7 @@ export default function BillDrawer({ bill, users, overdueDays, readOnly, onClose
         <header className="drawer-head">
           <div>
             <p className="history-modal-kicker">{t('Bill details')}</p>
-            <h2 id={titleId}>{bill.vendor}</h2>
+            <h2 id={titleId}><VendorName vendor={bill.vendor} /></h2>
             <div className="drawer-chips"><StageChip bill={bill} /> <ReasonBadges bill={bill} max={4} /></div>
           </div>
           <button ref={closeRef} type="button" className="btn" onClick={onClose}>{t('Close')}<span className="sr-only"> {t('bill details')}</span></button>

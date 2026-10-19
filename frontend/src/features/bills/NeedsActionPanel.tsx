@@ -5,7 +5,7 @@ import { isOverdue } from '../../lib/aging';
 import { useAppSettings } from '../../lib/appSettings';
 import { REASONS, deriveReasons, plural } from '../../lib/status';
 import type { Bill, UserProfile } from '../../types';
-import { DaysOpen, EmptyState, OverdueFlag, StageChip, billAmount, billRef } from './shared';
+import { DaysOpen, EmptyState, OverdueFlag, StageChip, VendorName, billAmount, billRef } from './shared';
 
 type Props = {
   bills: Bill[];
@@ -61,7 +61,7 @@ function ActionCard({ bill: b, users, threshold, readOnly, onEdit, onAssign, onR
   return (
     <li className={`exc-item${held ? ' is-held' : ''}`}>
       <div className="exc-top">
-        <span>{b.vendor} · <RecordedText value={b.invoice} /></span>
+        <span><VendorName vendor={b.vendor} /> · <RecordedText value={b.invoice} /></span>
         <span className="exc-amt mono"><Money value={billAmount(b)} /></span>
       </div>
       <ReasonBadges bill={b} />

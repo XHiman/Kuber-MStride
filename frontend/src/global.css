@@ -4913,3 +4913,170 @@ footer {
   flex: none;
   width: auto;
 }
+
+/* ── Vendor / DSU chart (Step 6) ──
+   Status hues validated with the dataviz palette validator (light on #fff, dark on #171716):
+   lightness band, chroma, CVD separation, normal-vision floor and 3:1 contrast all pass. */
+:root {
+  --chart-cleared: #087f23;
+  --chart-progress: #246fc4;
+  --chart-hold: #b42318;
+}
+:root[data-theme="dark"] {
+  --chart-cleared: #2ea44f;
+  --chart-progress: #4a94e8;
+  --chart-hold: #e0524c;
+}
+.chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+}
+.segmented button {
+  min-height: 30px;
+  padding: 3px 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.segmented button.is-selected {
+  background: var(--surface);
+  color: var(--text-1);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+.segmented button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+.legend-inline i.seg-cleared { background: var(--chart-cleared); }
+.legend-inline i.seg-progress { background: var(--chart-progress); }
+.legend-inline i.seg-hold { background: var(--chart-hold); }
+
+.hbar-chart {
+  margin: 0;
+}
+.hbar-axis {
+  position: relative;
+  height: 18px;
+  margin: 0 28px 4px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+.hbar-axis span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.hbar-axis span:first-child {
+  transform: none;
+}
+.hbar-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hbar-row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--grid, var(--border));
+}
+.hbar-row:last-child {
+  border-bottom: 0;
+}
+.hbar-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  margin-bottom: 4px;
+  font-size: 12.5px;
+}
+.hbar-name {
+  font-weight: 600;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.hbar-merged {
+  color: var(--text-muted);
+  cursor: help;
+}
+.hbar-value {
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.hbar-plot {
+  position: relative;
+  height: 12px;
+  margin-right: 28px;
+}
+.hbar-grid span {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--border);
+  opacity: 0.6;
+}
+.hbar-bar {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  height: 100%;
+  min-width: 2px;
+}
+.hbar-bar > span {
+  min-width: 2px;
+  height: 100%;
+}
+.hbar-bar > span:last-child {
+  border-radius: 0 4px 4px 0;
+}
+.hbar-bar .seg-cleared { background: var(--chart-cleared); }
+.hbar-bar .seg-progress { background: var(--chart-progress); }
+.hbar-bar .seg-hold { background: var(--chart-hold); }
+.hbar-bar > span:hover {
+  filter: brightness(1.12);
+}
+.raw-names {
+  display: block;
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 11px;
+}
+.vendor-table th[scope="row"] {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-1);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 12px;
+}
+.table-scroll table.vendor-table {
+  min-width: 560px;
+  table-layout: auto;
+}
+.vendor-table th[scope="row"] {
+  max-width: 260px;
+  white-space: normal;
+}
+.vendor-table .raw-names {
+  white-space: normal;
+}

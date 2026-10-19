@@ -11,7 +11,7 @@ import { DEFAULT_OVERDUE_DAYS, parseThreshold } from '../../lib/aging';
 import AgingPanel from './AgingPanel';
 import NeedsActionPanel from './NeedsActionPanel';
 import Register from './Register';
-import { EmptyState, billAmount } from './shared';
+import VendorChart from './VendorChart';
 
 export default function BillsTab({ globalQuery = '', readOnly = false, currentUserId = null }: { globalQuery?: string; readOnly?: boolean; currentUserId?: string | null }) {
   const { t } = useAppSettings();
@@ -132,7 +132,7 @@ export default function BillsTab({ globalQuery = '', readOnly = false, currentUs
 
       {/* Vendor + Exceptions */}
       <div className="grid-2">
-        <VendorPanel bills={bills} asOf={loadedAt} />
+        <VendorChart bills={bills} asOf={loadedAt} />
         <NeedsActionPanel
           bills={bills}
           users={users}
@@ -274,105 +274,6 @@ function StageRow({ dashboard, bills, activeStage, onSelect }: { dashboard: any;
   );
 }
 
-function VendorPanel({ bills, asOf }: { bills: Bill[]; asOf: Date | null }) {
-  const { t } = useAppSettings();
-  const agg = useMemo(() => {
-    const map: Record<string, { cleared: number; in_progress: number; on_hold: number; total: number; count: number }> = {};
-    for (const b of bills) {
-      if (!map[b.vendor]) map[b.vendor] = { cleared: 0, in_progress: 0, on_hold: 0, total: 0, count: 0 };
-      const v = map[b.vendor];
-      v.total += billAmount(b);
-      v.count += 1;
-      v[b.cat] += billAmount(b);
-    }
-    return Object.entries(map).sort((a, c) => c[1].total - a[1].total);
-  }, [bills]);
-  const [hoveredSegment, setHoveredSegment] = useState<{
-    label: string;
-    value: number;
-    percentage: number;
-    x: number;
-    y: number;
-  } | null>(null);
-
-  const handleSegmentHover = (
-    e: React.MouseEvent,
-    value: number,
-    total: number
-  ) => {
-    setHoveredSegment({
-      label: e.currentTarget.classList.contains('seg-cleared') ? t('Cleared') :
-             e.currentTarget.classList.contains('seg-progress') ? t('In progress') :
-             e.currentTarget.classList.contains('seg-hold') ? t('On hold / exception') : '',
-      value,
-      percentage: pct(value, total),
-      x: e.clientX,
-      y: e.clientY,
-    });
-  };
-
-  const handleSegmentLeave = () => {
-    setHoveredSegment(null);
-  };
-
-  return (
-    <div className="panel">
-      <div className="panel-head"><h2>{t('By DSU / vendor')}</h2><span className="note">{t('₹ value, split by clearance status')} · <AsOf at={asOf} /></span></div>
-      <div className="legend-inline">
-        <span><i style={{ background: 'var(--good)' }} />{t('Cleared')}</span>
-        <span><i style={{ background: 'var(--accent)' }} />{t('In progress')}</span>
-        <span><i style={{ background: 'var(--critical)' }} />{t('On hold / exception')}</span>
-      </div>
-      {agg.map(([vendor, a]) => (
-        <div key={vendor} className="vendor-row">
-          <div className="vendor-name" title={vendor}>{vendor} <span className="cnt">({a.count})</span></div>
-            <div className="vbar" role="img" aria-label={`${vendor}: ${t('Cleared')} ${fmtShort(a.cleared)}, ${t('In progress')} ${fmtShort(a.in_progress)}, ${t('On hold / exception')} ${fmtShort(a.on_hold)}`}>
-              {a.cleared > 0 && (
-                <span
-                  className="seg-cleared"
-                  style={{ width: `${pct(a.cleared, a.total)}%` }}
-                  onMouseMove={(e) => handleSegmentHover(e, a.cleared, a.total)}
-                  onMouseLeave={handleSegmentLeave}
-                />
-              )}
-
-              {a.in_progress > 0 && (
-                <span
-                  className="seg-progress"
-                  style={{ width: `${pct(a.in_progress, a.total)}%` }}
-                  onMouseMove={(e) => handleSegmentHover(e, a.in_progress, a.total)}
-                  onMouseLeave={handleSegmentLeave}
-                />
-              )}
-
-              {a.on_hold > 0 && (
-                <span
-                  className="seg-hold"
-                  style={{ width: `${Math.max(pct(a.on_hold, a.total), 2)}%` }}
-                  onMouseMove={(e) => handleSegmentHover(e, a.on_hold, a.total)}
-                  onMouseLeave={handleSegmentLeave}
-                />
-              )}
-            </div>
-          <div className="vendor-amt mono"><Money value={a.total} /></div>
-        </div>
-      ))}
-      {hoveredSegment && (
-        <div
-          className="mouse-tooltip"
-          style={{
-            left: hoveredSegment.x + 12,
-            top: hoveredSegment.y + 12,
-          }}
-        >
-          <div>{hoveredSegment.label}:</div>
-          <div>{fmtShort(hoveredSegment.value)} | {hoveredSegment.percentage.toFixed(1)}%</div>
-        </div>
-      )}
-      {agg.length === 0 && <EmptyState title={t('No bill activity yet')} detail={t('Vendor summaries will appear here when bills are entered.')} />}
-    </div>
-  );
-}
 
 
 

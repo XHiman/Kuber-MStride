@@ -12,7 +12,8 @@ import {
   EMPTY_FILTERS, SAVED_VIEWS, buildRegisterCsv, describeFilters, exportFilename, filterBills, paginate, sortBills,
   type RegisterFilters, type SortDir, type SortKey,
 } from './registerLogic';
-import { DaysOpen, OverdueFlag, StageChip, billAmount, billRef } from './shared';
+import { DaysOpen, OverdueFlag, StageChip, VendorName, billAmount, billRef } from './shared';
+import { normaliseVendor } from '../../lib/vendors';
 
 const PAGE_SIZE = 25;
 const EXPORT_CONFIRM_ROWS = 500;
@@ -56,7 +57,7 @@ const Register = forwardRef<HTMLHeadingElement, Props>(function Register(
   const view = paginate(filtered, page, PAGE_SIZE);
   const filterText = describeFilters(allFilters, globalQuery);
   const hasFilters = filterText.length > 0;
-  const vendors = useMemo(() => Array.from(new Set(bills.map(b => b.vendor))).sort(), [bills]);
+  const vendors = useMemo(() => Array.from(new Set(bills.map(b => normaliseVendor(b.vendor).name))).sort(), [bills]);
   const openBill = openBillId ? bills.find(b => b.id === openBillId) ?? null : null;
 
   // Back to page 1 whenever the result set changes shape.
@@ -185,7 +186,7 @@ const Register = forwardRef<HTMLHeadingElement, Props>(function Register(
               <tr key={b.id} className="bill-register-row" onClick={() => setOpenBillId(b.id)}>
                 <td className="vendor-cell">
                   <button type="button" className="link-btn row-open" onClick={event => { event.stopPropagation(); setOpenBillId(b.id); }}>
-                    {b.vendor}<span className="sr-only"> · {t('open details')}</span>
+                    <VendorName vendor={b.vendor} /><span className="sr-only"> · {t('open details')}</span>
                   </button>
                 </td>
                 <td className="inv-cell mono"><RecordedText value={b.invoice} /></td>
